@@ -33,6 +33,14 @@ const RUN_SPEED = 5;            // how fast you run
 const NUMBER_OF_PLATFORMS = 80; // how many platforms to the top
 const CHECKPOINT_EVERY = 10;    // a checkpoint every this many platforms
 const PLAYER_COLOR = '#ff6b6b'; // the color of your character
+const LEVEL_NUMBER = 1;         // change this to get a brand new tower!
+
+// A "random" number maker that gives the same numbers for the same level number
+let seed = LEVEL_NUMBER * 9999 + 12345;
+function random() {
+  seed = (seed * 1664525 + 1013904223) % 4294967296;
+  return seed / 4294967296;
+}
 
 // ============================================================
 //  SETUP
@@ -66,6 +74,7 @@ const platforms = [];
 platforms.push({ x: 0, y: GROUND_Y, w: W, h: 100, type: 'ground', number: 0 });
 
 let lastCenter = W / 2;
+let lastWidth = W;
 for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   const isSummit = i === NUMBER_OF_PLATFORMS;
   const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
@@ -73,11 +82,19 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   let w;
   if (isSummit) w = 260;
   else if (isCheckpoint) w = 180;
-  else w = 90 + Math.random() * 80;
+  else w = 90 + random() * 80;
 
-  let cx = lastCenter + (Math.random() * 2 - 1) * 240;
+  // Pick a spot that is always possible to jump to
+  const MAX_GAP = 100; // biggest empty space between two platforms
+  let cx = lastCenter + (random() * 2 - 1) * 220;
   cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
-  const y = GROUND_Y - i * 95 + (Math.random() * 30 - 15);
+  const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
+  if (gap > MAX_GAP) {
+    const direction = cx > lastCenter ? 1 : -1;
+    cx = lastCenter + direction * (MAX_GAP + w / 2 + lastWidth / 2);
+    cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+  }
+  const y = GROUND_Y - i * 85 + (random() * 20 - 10);
 
   let type = 'normal';
   if (isSummit) type = 'summit';
@@ -85,12 +102,13 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
 
   platforms.push({ x: cx - w / 2, y: y, w: w, h: 18, type: type, number: i });
   lastCenter = cx;
+  lastWidth = w;
 }
 
 // Clouds in the background
 const clouds = [];
 for (let i = 0; i < 60; i++) {
-  clouds.push({ x: Math.random() * W, y: GROUND_Y - Math.random() * NUMBER_OF_PLATFORMS * 95, size: 30 + Math.random() * 40 });
+  clouds.push({ x: random() * W, y: GROUND_Y - random() * NUMBER_OF_PLATFORMS * 85, size: 30 + random() * 40 });
 }
 
 // ============================================================
@@ -208,7 +226,7 @@ function mixColor(a, b, t) {
 
 function draw() {
   // Sky gets darker the higher you go
-  const howHigh = Math.min(1, Math.max(0, (GROUND_Y - player.y) / (NUMBER_OF_PLATFORMS * 95)));
+  const howHigh = Math.min(1, Math.max(0, (GROUND_Y - player.y) / (NUMBER_OF_PLATFORMS * 85)));
   ctx.fillStyle = mixColor('#87ceeb', '#0b0b3b', howHigh);
   ctx.fillRect(0, 0, W, H);
 
