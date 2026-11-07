@@ -1,6 +1,6 @@
 # Project notes for Claude
 
-This is Greta's personal project folder. Greta is a young beginner, so:
+This is Greta's personal project folder. Greta is 10 years old and new to coding, so:
 
 - Explain things simply and avoid jargon. Assume no prior coding experience.
 - Prefer simple, visible tech that runs by opening a file in the browser
