@@ -29,7 +29,7 @@
 // ============================================================
 const GRAVITY = 0.6;            // how fast you fall
 const JUMP_POWER = 13;          // how high you jump
-const RUN_SPEED = 5;            // how fast you run
+const RUN_SPEED = 4;            // how fast you run
 const BOUNCE_POWER = 21;        // how high bouncy platforms throw you
 const NUMBER_OF_PLATFORMS = 80; // how many platforms to the top
 const CHECKPOINT_EVERY = 10;    // a checkpoint every this many platforms
@@ -144,7 +144,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   let cx, y;
   if (type === 'bouncy') {
     // Bouncy platforms are a long, tricky jump away
-    const wantedGap = 115 + random() * 20;
+    const wantedGap = 95 + random() * 15;
     let direction = random() < 0.5 ? -1 : 1;
     cx = lastCenter + direction * (wantedGap + w / 2 + lastWidth / 2);
     if (cx < w / 2 + 10 || cx > WORLD_WIDTH - w / 2 - 10) {
@@ -155,7 +155,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
     y = lastY - (95 + 10 * difficulty) + (random() * 10 - 5);
   } else if (lastType === 'bouncy') {
     // After a bouncy platform you fly way up, so the next one is far above
-    const maxGap = 200;
+    const maxGap = 160;
     cx = lastCenter + (random() * 2 - 1) * 320;
     cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
     const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
@@ -173,7 +173,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
     const sideways = random() < 0.3;                                 // a flat sideways stretch?
 
     // Gaps get bigger as you go up, but never too big to jump
-    const maxGap = (sideways ? 110 : 70) + 50 * difficulty;
+    const maxGap = (sideways ? 90 : 55) + 40 * difficulty;
     cx = lastCenter + driftDir * (30 + random() * (150 + 100 * difficulty));
     cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
     const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
@@ -206,6 +206,195 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   lastType = type;
 }
 const TOWER_HEIGHT = GROUND_Y - lastY;
+
+// ============================================================
+//  OBSTACLES - bears, goats, birds and aliens!
+// ============================================================
+//   bear  - slow and big. Touch one and it chases you back to your checkpoint!
+//   goat  - trots back and forth and headbutts you off the platform
+//   bird  - swoops back and forth in the air
+//   alien - hovers in a flying saucer and zaps you
+// You can bonk goats, birds and aliens by jumping on top of them.
+const enemies = [];
+
+function makeEnemy(type, p) {
+  const e = { type: type, platform: p, dead: false, respawnTimer: 0, facing: 1, phase: random() * 6 };
+  if (type === 'bear')  { e.w = 44; e.h = 34; e.speed = 0.6; }
+  if (type === 'goat')  { e.w = 30; e.h = 24; e.speed = 1.2 + random(); }
+  if (type === 'bird')  { e.w = 26; e.h = 16; e.speed = 1.5 + random() * 1.5; }
+  if (type === 'alien') { e.w = 28; e.h = 28; e.speed = 1 + random(); }
+  resetEnemy(e);
+  return e;
+}
+
+function resetEnemy(e) {
+  const p = e.platform;
+  e.dead = false;
+  e.vx = e.speed * (Math.random() < 0.5 ? -1 : 1);
+  if (e.type === 'bird' || e.type === 'alien') {
+    // flying ones patrol a bit past both ends of their platform
+    e.minX = Math.max(0, p.x - 120);
+    e.maxX = Math.min(WORLD_WIDTH - e.w, p.x + p.w + 120);
+    e.baseY = p.y - (e.type === 'alien' ? 95 : 70);
+    e.x = p.x + p.w / 2 - e.w / 2;
+    e.y = e.baseY;
+  } else {
+    // walking ones stay on their platform
+    e.minX = p.x;
+    e.maxX = p.x + p.w - e.w;
+    e.x = Math.min(e.maxX, Math.max(e.minX, p.x + p.w / 2 - e.w / 2));
+    e.y = p.y - e.h;
+  }
+}
+
+for (const p of platforms) {
+  if (p.number < 4 || p.type !== 'normal') continue;
+  const difficulty = p.number / NUMBER_OF_PLATFORMS;
+  const roll = random();
+  if (p.zone === 0 && p.w >= 110 && roll < 0.22) {
+    enemies.push(makeEnemy('bear', p));
+  } else if ((p.zone === 1 || p.zone === 2) && p.w >= 80 && roll < 0.25 + 0.1 * difficulty) {
+    enemies.push(makeEnemy('goat', p));
+  } else if ((p.zone === 1 || p.zone === 2) && roll < 0.45 + 0.1 * difficulty) {
+    enemies.push(makeEnemy('bird', p));
+  } else if (p.zone === 3 && roll < 0.35) {
+    enemies.push(makeEnemy('alien', p));
+  }
+}
+
+function updateEnemies(oldBottom, newBottom) {
+  if (player.hurtTimer > 0) player.hurtTimer--;
+
+  for (const e of enemies) {
+    if (e.dead) {
+      e.respawnTimer--;
+      if (e.respawnTimer <= 0) resetEnemy(e);
+      continue;
+    }
+
+    // move back and forth
+    e.x += e.vx;
+    if (e.x < e.minX) { e.x = e.minX; e.vx = Math.abs(e.vx); }
+    if (e.x > e.maxX) { e.x = e.maxX; e.vx = -Math.abs(e.vx); }
+    e.facing = e.vx >= 0 ? 1 : -1;
+    if (e.type === 'bird') e.y = e.baseY + Math.sin(frames * 0.08 + e.phase) * 8;
+    if (e.type === 'alien') e.y = e.baseY + Math.sin(frames * 0.04 + e.phase) * 15;
+
+    // are we touching it?
+    const pad = 4;
+    const touching =
+      player.x + pad < e.x + e.w && player.x + player.w - pad > e.x &&
+      player.y + pad < e.y + e.h && player.y + player.h > e.y;
+    if (!touching) continue;
+
+    // jumping on top of it?
+    const stomp = player.vy > 0 && oldBottom <= e.y + 10 && e.type !== 'bear';
+    if (stomp) {
+      e.dead = true;
+      e.respawnTimer = 600;
+      player.y = e.y - player.h;
+      player.vy = -9;
+      showMessage('Bonk!');
+      continue;
+    }
+
+    if (player.hurtTimer > 0) continue; // you are safe for a moment after a hit
+
+    if (e.type === 'bear') {
+      respawn();
+      showMessage('A bear chased you back to your checkpoint!');
+      continue;
+    }
+
+    // knocked back!
+    const dir = (player.x + player.w / 2) < (e.x + e.w / 2) ? -1 : 1;
+    player.vx = dir * (e.type === 'bird' ? 6 : 8);
+    player.vy = e.type === 'bird' ? -5 : -7;
+    player.knockTimer = 18;
+    player.hurtTimer = 60;
+    player.onGround = false;
+    player.standingOn = null;
+    if (e.type === 'goat') showMessage('Bonk! A goat headbutted you!');
+    else if (e.type === 'bird') showMessage('A bird swooped at you!');
+    else showMessage('Zap! An alien bumped you!');
+  }
+}
+
+function drawEnemies() {
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const sx = e.x - cameraX;
+    const sy = e.y - cameraY;
+    if (sx + e.w < -20 || sx > W + 20 || sy + e.h < -20 || sy > H + 20) continue;
+
+    ctx.save();
+    ctx.translate(sx + e.w / 2, sy); // middle-top of the creature
+    ctx.scale(e.facing, 1);          // face the way it is walking
+    const legSwing = Math.sin(frames * 0.25 + e.phase) * 3;
+
+    if (e.type === 'goat') {
+      ctx.fillStyle = '#9e9e9e'; // legs
+      ctx.fillRect(-11 + legSwing, 18, 4, 6);
+      ctx.fillRect(-4 - legSwing, 18, 4, 6);
+      ctx.fillRect(3 + legSwing, 18, 4, 6);
+      ctx.fillStyle = '#f5f5f5'; // body
+      ctx.beginPath(); ctx.roundRect(-14, 8, 24, 12, 5); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(5, 2, 10, 11, 4); ctx.fill(); // head
+      ctx.fillRect(12, 12, 3, 5); // beard
+      ctx.fillStyle = '#8d6e63'; // horns
+      ctx.beginPath(); ctx.moveTo(6, 3); ctx.lineTo(3, -4); ctx.lineTo(9, 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(11, 3); ctx.lineTo(10, -4); ctx.lineTo(14, 2); ctx.fill();
+      ctx.fillStyle = '#222'; // eye
+      ctx.fillRect(11, 5, 2, 2);
+
+    } else if (e.type === 'bear') {
+      ctx.fillStyle = '#5d4037'; // legs
+      ctx.fillRect(-18 + legSwing, 26, 8, 8);
+      ctx.fillRect(-6 - legSwing, 26, 8, 8);
+      ctx.fillRect(6 + legSwing, 26, 8, 8);
+      ctx.fillStyle = '#795548'; // body
+      ctx.beginPath(); ctx.roundRect(-22, 8, 40, 20, 9); ctx.fill();
+      ctx.beginPath(); ctx.arc(12, 10, 10, 0, Math.PI * 2); ctx.fill(); // head
+      ctx.beginPath(); ctx.arc(6, 2, 4, 0, Math.PI * 2); ctx.arc(17, 2, 4, 0, Math.PI * 2); ctx.fill(); // ears
+      ctx.fillStyle = '#d7ccc8'; // snout
+      ctx.beginPath(); ctx.arc(19, 13, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.arc(21, 12, 2, 0, Math.PI * 2); ctx.fill(); // nose
+      ctx.fillRect(13, 7, 2, 2); // eye
+
+    } else if (e.type === 'bird') {
+      const flap = Math.sin(frames * 0.3 + e.phase) * 7;
+      ctx.fillStyle = '#37474f'; // wings
+      ctx.beginPath(); ctx.moveTo(-6, 8); ctx.lineTo(-14, 8 - flap); ctx.lineTo(2, 8); ctx.fill();
+      ctx.fillStyle = '#546e7a'; // body
+      ctx.beginPath(); ctx.ellipse(0, 9, 10, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(8, 5, 5, 0, Math.PI * 2); ctx.fill(); // head
+      ctx.fillStyle = '#ff9800'; // beak
+      ctx.beginPath(); ctx.moveTo(12, 4); ctx.lineTo(18, 6); ctx.lineTo(12, 8); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(9, 4, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#222';
+      ctx.beginPath(); ctx.arc(9.5, 4, 1, 0, Math.PI * 2); ctx.fill();
+
+    } else if (e.type === 'alien') {
+      ctx.fillStyle = '#90a4ae'; // saucer
+      ctx.beginPath(); ctx.ellipse(0, 23, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffeb3b'; // saucer lights
+      for (let i = -8; i <= 8; i += 8) { ctx.beginPath(); ctx.arc(i, 24, 1.5, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#66bb6a'; // alien
+      ctx.beginPath(); ctx.arc(0, 12, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#222'; // big eyes
+      ctx.beginPath(); ctx.ellipse(-3, 11, 2.5, 3.5, 0, 0, Math.PI * 2); ctx.ellipse(4, 11, 2.5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#66bb6a'; // antenna
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, 3); ctx.lineTo(0, -3); ctx.stroke();
+      ctx.fillStyle = '#ff4081';
+      ctx.beginPath(); ctx.arc(0, -4, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.lineWidth = 1;
+}
 
 // ============================================================
 //  BACKGROUND SCENERY (different in every zone)
@@ -314,7 +503,7 @@ const rocket = { x: -100, y: 250, speed: 1.2 };
 // ============================================================
 //  THE PLAYER
 // ============================================================
-const player = { x: WORLD_WIDTH / 2 - 16, y: GROUND_Y - 40, w: 32, h: 40, vx: 0, vy: 0, onGround: false, coyote: 0, facing: 1, standingOn: null };
+const player = { x: WORLD_WIDTH / 2 - 16, y: GROUND_Y - 40, w: 32, h: 40, vx: 0, vy: 0, onGround: false, coyote: 0, facing: 1, standingOn: null, knockTimer: 0, hurtTimer: 0 };
 let checkpoint = { x: player.x, y: player.y, number: 0 };
 let cameraY = GROUND_Y + 100 - H;
 let cameraX = WORLD_WIDTH / 2 - W / 2;
@@ -337,6 +526,8 @@ function respawn() {
   player.vx = 0;
   player.vy = 0;
   player.standingOn = null;
+  player.knockTimer = 0;
+  player.hurtTimer = 30;
   showMessage('Back to your checkpoint!');
 }
 
@@ -379,7 +570,11 @@ function update() {
   if (move !== 0) player.facing = move;
 
   const onIce = player.standingOn && player.standingOn.type === 'ice';
-  if (onIce) {
+  if (player.knockTimer > 0) {
+    // you got bonked! you cannot steer for a moment
+    player.knockTimer--;
+    player.vx *= 0.96;
+  } else if (onIce) {
     // slippery: you speed up slowly and keep sliding
     player.vx += move * 0.35;
     player.vx *= 0.96;
@@ -472,6 +667,8 @@ function update() {
     player.coyote = Math.max(0, player.coyote - 1);
     if (player.coyote === 0) player.standingOn = null;
   }
+
+  updateEnemies(oldBottom, newBottom);
 
   // --- Camera follows the player ---
   const target = player.y - H * 0.55;
@@ -795,6 +992,7 @@ function drawBackground() {
 //  THE MOUNTAIN CLIMBER
 // ============================================================
 function drawClimber(px, py) {
+  if (player.hurtTimer > 0 && Math.floor(frames / 4) % 2 === 0) return; // blink after a hit
   const running = player.onGround && Math.abs(player.vx) > 0.5;
   const inAir = !player.onGround;
   const step = running ? Math.sin(frames * 0.35) * 5 : 0; // legs swing while running
@@ -870,6 +1068,9 @@ function draw() {
     drawPlatform(p, sy);
   }
 
+  // Animals and aliens
+  drawEnemies();
+
   // Player
   drawClimber(player.x - cameraX, player.y - cameraY);
 
@@ -916,6 +1117,7 @@ function draw() {
     ctx.font = '17px Arial';
     ctx.fillStyle = '#ccc';
     ctx.fillText('Purple = moving   Orange = crumbles   Yellow/red = bouncy   Light blue = slippery ice', W / 2, H / 2 + 40);
+    ctx.fillText('Jump on goats, birds and aliens to bonk them. Stay away from bears!', W / 2, H / 2 + 66);
   }
 }
 
