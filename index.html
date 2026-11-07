@@ -33,7 +33,7 @@ const RUN_SPEED = 5;            // how fast you run
 const BOUNCE_POWER = 21;        // how high bouncy platforms throw you
 const NUMBER_OF_PLATFORMS = 80; // how many platforms to the top
 const CHECKPOINT_EVERY = 10;    // a checkpoint every this many platforms
-const PLAYER_COLOR = '#ff6b6b'; // the color of your character
+const PLAYER_COLOR = '#ff8c42'; // the color of your climber's jacket
 const LEVEL_NUMBER = 1;         // change this to get a brand new tower!
 
 // The tower is split into zones. Each zone looks different.
@@ -765,6 +765,75 @@ function drawBackground() {
   }
 }
 
+// ============================================================
+//  THE MOUNTAIN CLIMBER
+// ============================================================
+function drawClimber(px, py) {
+  const running = player.onGround && Math.abs(player.vx) > 0.5;
+  const inAir = !player.onGround;
+  const step = running ? Math.sin(frames * 0.35) * 5 : 0; // legs swing while running
+
+  ctx.save();
+  ctx.translate(px + player.w / 2, py);   // middle-top of the player
+  ctx.scale(player.facing, 1);            // flip to face left or right
+
+  // Backpack (on the back)
+  ctx.fillStyle = '#5c4a3a';
+  ctx.beginPath(); ctx.roundRect(-18, 14, 10, 18, 3); ctx.fill();
+  // coiled rope on the backpack
+  ctx.strokeStyle = '#f4d35e';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(-13, 22, 4, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(-13, 22, 2, 0, Math.PI * 2); ctx.stroke();
+
+  // Legs and boots
+  ctx.fillStyle = '#3b4a6b'; // pants
+  ctx.fillRect(-7 + (inAir ? -3 : step), 30, 6, 7);
+  ctx.fillRect(1 + (inAir ? 3 : -step), 30, 6, 7);
+  ctx.fillStyle = '#4a2c17'; // boots
+  ctx.fillRect(-8 + (inAir ? -3 : step), 36, 8, 4);
+  ctx.fillRect(0 + (inAir ? 3 : -step), 36, 8, 4);
+
+  // Jacket
+  ctx.fillStyle = PLAYER_COLOR;
+  ctx.beginPath(); ctx.roundRect(-10, 17, 20, 15, 4); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)'; // zipper
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, 18); ctx.lineTo(0, 31); ctx.stroke();
+
+  // Arm and ice axe (in front)
+  ctx.fillStyle = PLAYER_COLOR;
+  const armLift = inAir ? -8 : 0;
+  ctx.beginPath(); ctx.roundRect(6, 19 + armLift, 5, 11, 2); ctx.fill();
+  ctx.fillStyle = '#8d6e63'; // axe handle
+  ctx.fillRect(9, 12 + armLift, 3, 20);
+  ctx.fillStyle = '#cfd8dc'; // axe head
+  ctx.beginPath();
+  ctx.moveTo(6, 12 + armLift); ctx.lineTo(18, 12 + armLift); ctx.lineTo(17, 15 + armLift); ctx.lineTo(8, 16 + armLift);
+  ctx.fill();
+
+  // Face
+  ctx.fillStyle = '#f1c27d';
+  ctx.beginPath(); ctx.roundRect(-8, 7, 16, 11, 4); ctx.fill();
+  ctx.fillStyle = '#222'; // eye
+  ctx.beginPath(); ctx.arc(4, 12, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#222'; // smile
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(3, 14, 3, 0.2, Math.PI - 0.6); ctx.stroke();
+
+  // Helmet
+  ctx.fillStyle = '#e63946';
+  ctx.beginPath(); ctx.arc(0, 8, 10, Math.PI, 0); ctx.fill();
+  ctx.fillRect(-10, 7, 20, 2);
+  ctx.fillStyle = '#ffd93d'; // headlamp
+  ctx.fillRect(5, 3, 5, 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; // shine
+  ctx.beginPath(); ctx.arc(-4, 3, 2.5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+  ctx.lineWidth = 1;
+}
+
 function draw() {
   drawBackground();
 
@@ -776,23 +845,7 @@ function draw() {
   }
 
   // Player
-  const px = player.x;
-  const py = player.y - cameraY;
-  ctx.fillStyle = PLAYER_COLOR;
-  ctx.beginPath();
-  ctx.roundRect(px, py, player.w, player.h, 10);
-  ctx.fill();
-  const eyeX = px + player.w / 2 + player.facing * 6;
-  ctx.fillStyle = 'white';
-  ctx.beginPath();
-  ctx.arc(eyeX - 6, py + 14, 5, 0, Math.PI * 2);
-  ctx.arc(eyeX + 6, py + 14, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'black';
-  ctx.beginPath();
-  ctx.arc(eyeX - 6 + player.facing * 2, py + 14, 2.5, 0, Math.PI * 2);
-  ctx.arc(eyeX + 6 + player.facing * 2, py + 14, 2.5, 0, Math.PI * 2);
-  ctx.fill();
+  drawClimber(player.x, player.y - cameraY);
 
   // Score board
   const height = Math.max(0, Math.round((GROUND_Y - player.h - player.y) / 10));
