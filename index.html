@@ -13,9 +13,9 @@
     font-family: Arial, sans-serif;
     color: white;
   }
-  h1 { margin: 10px 0 4px; }
-  p { margin: 0 0 10px; color: #bbb; }
-  canvas { border: 4px solid #333; border-radius: 8px; }
+  h1 { margin: 6px 0 2px; font-size: 22px; }
+  p { margin: 0 0 6px; color: #bbb; font-size: 13px; }
+  canvas { border: 4px solid #333; border-radius: 8px; display: block; }
 </style>
 </head>
 <body>
@@ -58,6 +58,23 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width;
 const H = canvas.height;
+
+// Make the game as big as the browser window allows (keeps the same shape)
+function fitToWindow() {
+  const spaceForText = 70;
+  const maxWidth = window.innerWidth - 20;
+  const maxHeight = window.innerHeight - spaceForText;
+  let width = maxWidth;
+  let height = width * (H / W);
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * (W / H);
+  }
+  canvas.style.width = Math.floor(width) + 'px';
+  canvas.style.height = Math.floor(height) + 'px';
+}
+fitToWindow();
+window.addEventListener('resize', fitToWindow);
 const GROUND_Y = 500; // where the ground is
 
 // Keyboard
