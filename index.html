@@ -152,15 +152,104 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
 }
 const TOWER_HEIGHT = GROUND_Y - lastY;
 
-// Clouds and stars in the background
+// ============================================================
+//  BACKGROUND SCENERY (different in every zone)
+// ============================================================
+// Where each zone starts and ends (remember: higher up = smaller y)
+const zoneTop = [];
+const zoneBottom = [];
+for (const p of platforms) {
+  if (zoneTop[p.zone] === undefined || p.y < zoneTop[p.zone]) zoneTop[p.zone] = p.y;
+  if (zoneBottom[p.zone] === undefined || p.y > zoneBottom[p.zone]) zoneBottom[p.zone] = p.y;
+}
+// The line between one zone and the next
+const boundaries = [];
+for (let z = 0; z < ZONES.length - 1; z++) boundaries.push((zoneTop[z] + zoneBottom[z + 1]) / 2);
+
+// Which zone is a height in?
+function zoneAt(y) {
+  let z = 0;
+  while (z < boundaries.length && y < boundaries[z]) z++;
+  return z;
+}
+
+// How strongly should zone z's scenery show at height y? (1 = fully, 0 = not at all)
+const BLEND = 250;
+function zoneStrength(z, y) {
+  const topEdge = z === 0 ? 999999 : boundaries[z - 1];      // bottom of zone (bigger y)
+  const bottomEdge = z === boundaries.length ? -999999 : boundaries[z]; // top of zone (smaller y)
+  let outside = 0;
+  if (y > topEdge) outside = y - topEdge;
+  if (y < bottomEdge) outside = bottomEdge - y;
+  return Math.max(0, 1 - outside / BLEND);
+}
+
+function skyColorAt(y) {
+  const z = zoneAt(y);
+  if (z < boundaries.length) {
+    const dist = y - boundaries[z];
+    if (dist < BLEND) return mixColor(ZONES[z].sky, ZONES[z + 1].sky, 0.5 * (1 - dist / BLEND));
+  }
+  if (z > 0) {
+    const dist = boundaries[z - 1] - y;
+    if (dist < BLEND) return mixColor(ZONES[z - 1].sky, ZONES[z].sky, 0.5 + 0.5 * dist / BLEND);
+  }
+  return ZONES[z].sky;
+}
+
+// Far-away scenery moves slower than the platforms. That is called "parallax".
+// This picks a spot for a decoration so it shows up while you are in that zone.
+function spotInZone(z, parallax) {
+  const camMin = zoneTop[z] - H * 0.55;
+  const camMax = Math.min(GROUND_Y + 100 - H, zoneBottom[z] - H * 0.55);
+  return parallax * camMin + random() * (parallax * (camMax - camMin) + H);
+}
+
 const clouds = [];
 for (let i = 0; i < 60; i++) {
-  clouds.push({ x: random() * W, y: GROUND_Y - random() * TOWER_HEIGHT, size: 30 + random() * 40 });
+  const z = Math.floor(random() * 3); // clouds in the first three zones
+  clouds.push({ x: random() * W, py: spotInZone(z, 0.6), size: 30 + random() * 40 });
 }
 const stars = [];
 for (let i = 0; i < 120; i++) {
-  stars.push({ x: random() * W, y: random() * H, size: 1 + random() * 2 });
+  stars.push({ x: random() * W, y: random() * H, size: 1 + random() * 2, twinkle: random() * 6 });
 }
+// Meadow
+const hills = [
+  { x: 150, py: 540, r: 220, color: '#4caf50' },
+  { x: 650, py: 560, r: 260, color: '#43a047' },
+  { x: 400, py: 600, r: 200, color: '#388e3c' },
+];
+const trees = [];
+for (let i = 0; i < 25; i++) {
+  trees.push({ x: random() * W, py: spotInZone(0, 0.5), size: 20 + random() * 25 });
+}
+// Mountains
+const farMountains = [];
+for (let i = 0; i < 14; i++) {
+  farMountains.push({ x: random() * W, py: spotInZone(1, 0.3), w: 250 + random() * 250, h: 180 + random() * 200 });
+}
+const nearMountains = [];
+for (let i = 0; i < 10; i++) {
+  nearMountains.push({ x: random() * W, py: spotInZone(1, 0.5), w: 180 + random() * 200, h: 150 + random() * 150 });
+}
+const birds = [];
+for (let i = 0; i < 7; i++) {
+  birds.push({ x: random() * W, y: 60 + random() * 400, speed: 0.6 + random() * 0.8, flap: random() * 6 });
+}
+// Icy Peaks
+const snowyPeaks = [];
+for (let i = 0; i < 14; i++) {
+  snowyPeaks.push({ x: random() * W, py: spotInZone(2, 0.4), w: 200 + random() * 200, h: 200 + random() * 200 });
+}
+const snowflakes = [];
+for (let i = 0; i < 90; i++) {
+  snowflakes.push({ x: random() * W, y: random() * H, speed: 0.7 + random() * 1.3, wobble: random() * 6, size: 1.5 + random() * 2 });
+}
+// Outer Space
+const moon = { x: 630, py: spotInZone(3, 0.2), r: 70 };
+const planet = { x: 160, py: spotInZone(3, 0.3), r: 45 };
+const rocket = { x: -100, y: 250, speed: 1.2 };
 
 // ============================================================
 //  THE PLAYER
@@ -458,24 +547,169 @@ function drawPlatform(p, sy) {
   }
 }
 
-function draw() {
-  // Sky changes color as you climb through the zones
-  const howHigh = Math.min(1, Math.max(0, (GROUND_Y - player.y) / TOWER_HEIGHT));
-  const zonePos = howHigh * (ZONES.length - 1);
-  const zi = Math.min(ZONES.length - 2, Math.floor(zonePos));
-  ctx.fillStyle = mixColor(ZONES[zi].sky, ZONES[zi + 1].sky, zonePos - zi);
+function drawMountain(m, parallax, color, snowy) {
+  const baseY = m.py - cameraY * parallax;
+  if (baseY - m.h > H || baseY < 0) return;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(m.x - m.w / 2, baseY);
+  ctx.lineTo(m.x, baseY - m.h);
+  ctx.lineTo(m.x + m.w / 2, baseY);
+  ctx.fill();
+  if (snowy) {
+    // white snow cap on top
+    const capH = m.h * 0.3;
+    const capW = m.w * 0.3;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(m.x - capW / 2, baseY - m.h + capH);
+    ctx.lineTo(m.x, baseY - m.h);
+    ctx.lineTo(m.x + capW / 2, baseY - m.h + capH);
+    ctx.lineTo(m.x + capW / 4, baseY - m.h + capH * 0.8);
+    ctx.lineTo(m.x, baseY - m.h + capH * 1.1);
+    ctx.lineTo(m.x - capW / 4, baseY - m.h + capH * 0.8);
+    ctx.fill();
+  }
+}
+
+function drawBackground() {
+  const y = player.y;
+  const meadow = zoneStrength(0, y);
+  const mountains = zoneStrength(1, y);
+  const icy = zoneStrength(2, y);
+  const space = zoneStrength(3, y);
+
+  // Sky
+  ctx.fillStyle = skyColorAt(y);
   ctx.fillRect(0, 0, W, H);
 
-  // Stars show up when you get near space
-  if (howHigh > 0.6) {
-    ctx.fillStyle = 'rgba(255,255,255,' + Math.min(1, (howHigh - 0.6) * 3) + ')';
-    for (const s of stars) ctx.fillRect(s.x, s.y, s.size, s.size);
+  // ---------- OUTER SPACE ----------
+  if (space > 0) {
+    // twinkling stars
+    for (const s of stars) {
+      const tw = 0.6 + 0.4 * Math.sin(frames * 0.05 + s.twinkle);
+      ctx.fillStyle = 'rgba(255,255,255,' + (space * tw) + ')';
+      ctx.fillRect(s.x, s.y, s.size, s.size);
+    }
+    ctx.globalAlpha = space;
+    // the moon
+    const moonY = moon.py - cameraY * 0.2;
+    ctx.fillStyle = '#e8e6d8';
+    ctx.beginPath(); ctx.arc(moon.x, moonY, moon.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c9c7b8';
+    ctx.beginPath();
+    ctx.arc(moon.x - 25, moonY - 15, 14, 0, Math.PI * 2);
+    ctx.arc(moon.x + 20, moonY + 20, 10, 0, Math.PI * 2);
+    ctx.arc(moon.x + 15, moonY - 30, 7, 0, Math.PI * 2);
+    ctx.fill();
+    // a ringed planet
+    const planetY = planet.py - cameraY * 0.3;
+    ctx.fillStyle = '#e07a5f';
+    ctx.beginPath(); ctx.arc(planet.x, planetY, planet.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#f2cc8f';
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.ellipse(planet.x, planetY, planet.r * 1.8, planet.r * 0.45, -0.3, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1;
+    // a rocket flying past
+    rocket.x += rocket.speed;
+    if (rocket.x > W + 100) { rocket.x = -100; rocket.y = 80 + Math.random() * 350; }
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(rocket.x + 30, rocket.y);
+    ctx.lineTo(rocket.x + 10, rocket.y - 8);
+    ctx.lineTo(rocket.x - 15, rocket.y - 8);
+    ctx.lineTo(rocket.x - 15, rocket.y + 8);
+    ctx.lineTo(rocket.x + 10, rocket.y + 8);
+    ctx.fill();
+    ctx.fillStyle = '#e63946';
+    ctx.fillRect(rocket.x - 20, rocket.y - 14, 8, 28);
+    ctx.fillStyle = '#ffb703';
+    ctx.beginPath();
+    ctx.moveTo(rocket.x - 20, rocket.y - 5);
+    ctx.lineTo(rocket.x - 38 - Math.random() * 10, rocket.y);
+    ctx.lineTo(rocket.x - 20, rocket.y + 5);
+    ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
-  // Clouds
-  ctx.fillStyle = 'rgba(255,255,255,' + (0.7 * (1 - Math.max(0, howHigh - 0.7) / 0.3)) + ')';
+  // ---------- THE MEADOW ----------
+  if (meadow > 0) {
+    ctx.globalAlpha = meadow;
+    // the sun
+    ctx.fillStyle = '#ffd93d';
+    ctx.beginPath(); ctx.arc(W - 90, 80, 38, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,217,61,0.6)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + frames * 0.005;
+      ctx.beginPath();
+      ctx.moveTo(W - 90 + Math.cos(a) * 46, 80 + Math.sin(a) * 46);
+      ctx.lineTo(W - 90 + Math.cos(a) * 60, 80 + Math.sin(a) * 60);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    // trees
+    for (const t of trees) {
+      const sy = t.py - cameraY * 0.5;
+      if (sy < -80 || sy > H + 80) continue;
+      ctx.fillStyle = '#6d4c41';
+      ctx.fillRect(t.x - 4, sy - t.size, 8, t.size);
+      ctx.fillStyle = '#2e7d32';
+      ctx.beginPath(); ctx.arc(t.x, sy - t.size, t.size * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#43a047';
+      ctx.beginPath(); ctx.arc(t.x - t.size * 0.2, sy - t.size - t.size * 0.2, t.size * 0.4, 0, Math.PI * 2); ctx.fill();
+    }
+    // rolling hills
+    for (const h of hills) {
+      const sy = h.py - cameraY * 0.8;
+      if (sy - h.r > H) continue;
+      ctx.fillStyle = h.color;
+      ctx.beginPath(); ctx.arc(h.x, sy, h.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- THE MOUNTAINS ----------
+  if (mountains > 0) {
+    ctx.globalAlpha = mountains;
+    for (const m of farMountains) drawMountain(m, 0.3, '#3d4a5c', false);
+    for (const m of nearMountains) drawMountain(m, 0.5, '#55657a', false);
+    // birds
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 2;
+    for (const b of birds) {
+      b.x += b.speed;
+      if (b.x > W + 20) { b.x = -20; b.y = 60 + Math.random() * 400; }
+      const flap = Math.sin(frames * 0.15 + b.flap) * 4;
+      ctx.beginPath();
+      ctx.moveTo(b.x - 8, b.y - flap);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b.x + 8, b.y - flap);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- THE ICY PEAKS ----------
+  if (icy > 0) {
+    ctx.globalAlpha = icy;
+    for (const m of snowyPeaks) drawMountain(m, 0.4, '#8fa3b8', true);
+    // falling snow
+    ctx.fillStyle = '#ffffff';
+    for (const f of snowflakes) {
+      f.y += f.speed;
+      f.x += Math.sin(frames * 0.02 + f.wobble) * 0.5;
+      if (f.y > H) { f.y = -5; f.x = Math.random() * W; }
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- CLOUDS (meadow, mountains and icy peaks) ----------
+  ctx.fillStyle = 'rgba(255,255,255,' + (0.75 * (1 - space)) + ')';
   for (const c of clouds) {
-    const sy = c.y - cameraY * 0.6;
+    const sy = c.py - cameraY * 0.6;
     if (sy < -60 || sy > H + 60) continue;
     ctx.beginPath();
     ctx.arc(c.x, sy, c.size * 0.5, 0, Math.PI * 2);
@@ -483,6 +717,10 @@ function draw() {
     ctx.arc(c.x - c.size * 0.4, sy + c.size * 0.05, c.size * 0.35, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+function draw() {
+  drawBackground();
 
   // Platforms
   for (const p of platforms) {
@@ -527,7 +765,7 @@ function draw() {
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(W - 190, 10, 180, 34);
   ctx.fillStyle = 'white';
-  ctx.fillText(ZONES[currentZone].name, W - 20, 34);
+  ctx.fillText(ZONES[zoneAt(player.y)].name, W - 20, 34);
 
   // Messages
   if (messageTimer > 0) {
