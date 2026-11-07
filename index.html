@@ -30,10 +30,19 @@
 const GRAVITY = 0.6;            // how fast you fall
 const JUMP_POWER = 13;          // how high you jump
 const RUN_SPEED = 5;            // how fast you run
+const BOUNCE_POWER = 21;        // how high bouncy platforms throw you
 const NUMBER_OF_PLATFORMS = 80; // how many platforms to the top
 const CHECKPOINT_EVERY = 10;    // a checkpoint every this many platforms
 const PLAYER_COLOR = '#ff6b6b'; // the color of your character
 const LEVEL_NUMBER = 1;         // change this to get a brand new tower!
+
+// The tower is split into zones. Each zone looks different.
+const ZONES = [
+  { name: 'The Meadow',    sky: '#87ceeb' },
+  { name: 'The Mountains', sky: '#6a9bd1' },
+  { name: 'The Icy Peaks', sky: '#cfe8f7' },
+  { name: 'Outer Space',   sky: '#0b0b3b' },
+];
 
 // A "random" number maker that gives the same numbers for the same level number
 let seed = LEVEL_NUMBER * 9999 + 12345;
@@ -70,61 +79,106 @@ window.addEventListener('keyup', function (e) { keys[e.key] = false; });
 // ============================================================
 //  BUILD THE PLATFORMS (the tower you climb)
 // ============================================================
+// Kinds of platforms:
+//   normal   - just stand on it
+//   moving   - slides left and right, and carries you along
+//   crumble  - breaks apart shortly after you land on it
+//   bouncy   - throws you way up high
+//   ice      - super slippery!
+//   checkpoint / summit - where you save your spot / the goal
 const platforms = [];
-platforms.push({ x: 0, y: GROUND_Y, w: W, h: 100, type: 'ground', number: 0 });
+platforms.push({ x: 0, y: GROUND_Y, w: W, h: 100, type: 'ground', number: 0, zone: 0 });
 
 let lastCenter = W / 2;
 let lastWidth = W;
+let lastY = GROUND_Y;
 for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
+  const difficulty = i / NUMBER_OF_PLATFORMS; // 0 at the bottom, 1 at the top
+  const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
   const isSummit = i === NUMBER_OF_PLATFORMS;
   const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
 
-  let w;
-  if (isSummit) w = 260;
-  else if (isCheckpoint) w = 180;
-  else w = 90 + random() * 80;
-
-  // Pick a spot that is always possible to jump to
-  const MAX_GAP = 100; // biggest empty space between two platforms
-  let cx = lastCenter + (random() * 2 - 1) * 220;
-  cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
-  const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
-  if (gap > MAX_GAP) {
-    const direction = cx > lastCenter ? 1 : -1;
-    cx = lastCenter + direction * (MAX_GAP + w / 2 + lastWidth / 2);
-    cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
-  }
-  const y = GROUND_Y - i * 85 + (random() * 20 - 10);
-
+  // Decide what kind of platform this is. Higher up = more tricky ones.
   let type = 'normal';
   if (isSummit) type = 'summit';
   else if (isCheckpoint) type = 'checkpoint';
+  else {
+    const specialChance = 0.15 + 0.45 * difficulty;
+    if (random() < specialChance) {
+      const pick = random();
+      if (pick < 0.3) type = 'moving';
+      else if (pick < 0.55) type = 'crumble';
+      else if (pick < 0.75) type = 'bouncy';
+      else type = 'ice';
+    }
+    if (zone === 2 && type === 'normal' && random() < 0.5) type = 'ice';
+  }
 
-  platforms.push({ x: cx - w / 2, y: y, w: w, h: 18, type: type, number: i });
+  // Platforms get smaller as you go up
+  let w;
+  if (isSummit) w = 260;
+  else if (isCheckpoint) w = 180;
+  else w = (90 - 30 * difficulty) + random() * (80 - 40 * difficulty);
+
+  // Gaps get bigger as you go up, but never too big to jump
+  const maxGap = 70 + 50 * difficulty;
+  let cx = lastCenter + (random() * 2 - 1) * (160 + 100 * difficulty);
+  cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+  const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
+  if (gap > maxGap) {
+    const direction = cx > lastCenter ? 1 : -1;
+    cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+    cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+  }
+  const y = lastY - (80 + 20 * difficulty) + (random() * 20 - 10);
+
+  const p = {
+    x: cx - w / 2, y: y, w: w, h: 18, type: type, number: i, zone: zone,
+    vx: 0, minX: 0, maxX: 0,          // for moving platforms
+    crumbleTimer: 0, broken: false, respawnTimer: 0, // for crumble platforms
+    squish: 0,                        // for bouncy platforms
+  };
+  if (type === 'moving') {
+    p.vx = (random() < 0.5 ? -1 : 1) * (1 + 1.5 * difficulty);
+    const range = 60 + random() * 60;
+    p.minX = Math.max(0, p.x - range);
+    p.maxX = Math.min(W - w, p.x + range);
+  }
+  platforms.push(p);
+
   lastCenter = cx;
   lastWidth = w;
+  lastY = y;
 }
+const TOWER_HEIGHT = GROUND_Y - lastY;
 
-// Clouds in the background
+// Clouds and stars in the background
 const clouds = [];
 for (let i = 0; i < 60; i++) {
-  clouds.push({ x: random() * W, y: GROUND_Y - random() * NUMBER_OF_PLATFORMS * 85, size: 30 + random() * 40 });
+  clouds.push({ x: random() * W, y: GROUND_Y - random() * TOWER_HEIGHT, size: 30 + random() * 40 });
+}
+const stars = [];
+for (let i = 0; i < 120; i++) {
+  stars.push({ x: random() * W, y: random() * H, size: 1 + random() * 2 });
 }
 
 // ============================================================
 //  THE PLAYER
 // ============================================================
-const player = { x: W / 2 - 16, y: GROUND_Y - 40, w: 32, h: 40, vx: 0, vy: 0, onGround: false, coyote: 0, facing: 1 };
+const player = { x: W / 2 - 16, y: GROUND_Y - 40, w: 32, h: 40, vx: 0, vy: 0, onGround: false, coyote: 0, facing: 1, standingOn: null };
 let checkpoint = { x: player.x, y: player.y, number: 0 };
 let cameraY = GROUND_Y + 100 - H;
 let bestHeight = 0;
+let currentZone = 0;
 let won = false;
+let frames = 0;       // counts time while you play
+let finishFrames = 0; // how long it took you to reach the top
 let message = '';
 let messageTimer = 0;
 
 function showMessage(text) {
   message = text;
-  messageTimer = 120;
+  messageTimer = 150;
 }
 
 function respawn() {
@@ -132,33 +186,81 @@ function respawn() {
   player.y = checkpoint.y;
   player.vx = 0;
   player.vy = 0;
+  player.standingOn = null;
   showMessage('Back to your checkpoint!');
+}
+
+function formatTime(f) {
+  const totalSeconds = Math.floor(f / 60);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 }
 
 // ============================================================
 //  UPDATE - runs 60 times every second
 // ============================================================
 function update() {
-  // Running left and right
+  frames++;
+
+  // --- Platforms do their thing ---
+  for (const p of platforms) {
+    if (p.type === 'moving') {
+      p.x += p.vx;
+      if (p.x < p.minX) { p.x = p.minX; p.vx = -p.vx; }
+      if (p.x > p.maxX) { p.x = p.maxX; p.vx = -p.vx; }
+    }
+    if (p.type === 'crumble') {
+      if (p.broken) {
+        p.respawnTimer--;
+        if (p.respawnTimer <= 0) { p.broken = false; p.crumbleTimer = 0; }
+      } else if (p.crumbleTimer > 0) {
+        p.crumbleTimer++;
+        if (p.crumbleTimer > 35) { p.broken = true; p.respawnTimer = 180; }
+      }
+    }
+    if (p.squish > 0) p.squish--;
+  }
+
+  // --- Running left and right ---
   let move = 0;
   if (keys.ArrowLeft || keys.a || keys.A) move -= 1;
   if (keys.ArrowRight || keys.d || keys.D) move += 1;
-  player.vx = move * RUN_SPEED;
   if (move !== 0) player.facing = move;
 
-  // Jumping (coyote time lets you jump just after leaving an edge)
+  const onIce = player.standingOn && player.standingOn.type === 'ice';
+  if (onIce) {
+    // slippery: you speed up slowly and keep sliding
+    player.vx += move * 0.35;
+    player.vx *= 0.96;
+    const maxSlide = RUN_SPEED * 1.4;
+    if (player.vx > maxSlide) player.vx = maxSlide;
+    if (player.vx < -maxSlide) player.vx = -maxSlide;
+  } else if (move !== 0 || player.onGround) {
+    player.vx = move * RUN_SPEED;
+  } else {
+    player.vx *= 0.9; // in the air with no key pressed: slow down gently
+  }
+
+  // Moving platforms carry you
+  if (player.standingOn && player.standingOn.type === 'moving') {
+    player.x += player.standingOn.vx;
+  }
+
+  // --- Jumping (coyote time lets you jump just after leaving an edge) ---
   if (jumpPressed && (player.onGround || player.coyote > 0)) {
     player.vy = -JUMP_POWER;
     player.onGround = false;
     player.coyote = 0;
+    player.standingOn = null;
   }
   jumpPressed = false;
 
-  // Gravity
+  // --- Gravity ---
   player.vy += GRAVITY;
   if (player.vy > 18) player.vy = 18;
 
-  // Move
+  // --- Move ---
   player.x += player.vx;
   if (player.x < 0) player.x = 0;
   if (player.x + player.w > W) player.x = W - player.w;
@@ -167,25 +269,45 @@ function update() {
   player.y += player.vy;
   const newBottom = player.y + player.h;
 
-  // Landing on platforms (you can jump up through them from below)
+  // --- Landing on platforms (you can jump up through them from below) ---
   let landed = false;
+  let landedOn = null;
   if (player.vy >= 0) {
     for (const p of platforms) {
+      if (p.broken) continue;
       const overlapsSideways = player.x + player.w > p.x && player.x < p.x + p.w;
-      const crossedTop = oldBottom <= p.y && newBottom >= p.y;
+      const crossedTop = oldBottom <= p.y + 2 && newBottom >= p.y;
       if (overlapsSideways && crossedTop) {
         player.y = p.y - player.h;
         player.vy = 0;
         landed = true;
+        landedOn = p;
 
+        if (p.type === 'bouncy') {
+          player.vy = -BOUNCE_POWER;
+          p.squish = 12;
+          landed = false;
+          landedOn = null;
+        }
+        if (p.type === 'crumble' && p.crumbleTimer === 0) {
+          p.crumbleTimer = 1;
+        }
+
+        let text = '';
         if (p.type === 'checkpoint' && p.number > checkpoint.number) {
           checkpoint = { x: p.x + p.w / 2 - player.w / 2, y: p.y - player.h, number: p.number };
-          showMessage('Checkpoint ' + (p.number / CHECKPOINT_EVERY) + '!');
+          text = 'Checkpoint ' + (p.number / CHECKPOINT_EVERY) + '!';
+        }
+        if (p.zone !== currentZone) {
+          currentZone = p.zone;
+          text += (text ? ' ' : '') + 'Welcome to ' + ZONES[p.zone].name + '!';
         }
         if (p.type === 'summit' && !won) {
           won = true;
-          showMessage('YOU MADE IT TO THE TOP!');
+          finishFrames = frames;
+          text = 'YOU MADE IT! Time: ' + formatTime(finishFrames);
         }
+        if (text) showMessage(text);
         break;
       }
     }
@@ -194,18 +316,20 @@ function update() {
   if (landed) {
     player.onGround = true;
     player.coyote = 6;
+    player.standingOn = landedOn;
   } else {
     player.onGround = false;
     player.coyote = Math.max(0, player.coyote - 1);
+    if (player.coyote === 0) player.standingOn = null;
   }
 
-  // Camera follows the player
+  // --- Camera follows the player ---
   const target = player.y - H * 0.55;
   cameraY += (target - cameraY) * 0.1;
   const lowestCamera = GROUND_Y + 100 - H;
   if (cameraY > lowestCamera) cameraY = lowestCamera;
 
-  // Height score
+  // --- Height score ---
   const height = Math.max(0, Math.round((GROUND_Y - player.h - player.y) / 10));
   if (height > bestHeight) bestHeight = height;
 
@@ -224,14 +348,132 @@ function mixColor(a, b, t) {
   return 'rgb(' + r + ',' + g + ',' + bl + ')';
 }
 
+function drawPlatform(p, sy) {
+  let x = p.x;
+  // Crumbling platforms shake before they break
+  if (p.type === 'crumble' && p.crumbleTimer > 0) x += (Math.random() * 4 - 2);
+
+  if (p.type === 'ground') {
+    ctx.fillStyle = '#5a3d1e';
+    ctx.fillRect(x, sy, p.w, p.h);
+    ctx.fillStyle = '#3cb043';
+    ctx.fillRect(x, sy, p.w, 12);
+
+  } else if (p.type === 'checkpoint') {
+    ctx.fillStyle = '#2d6cdf';
+    ctx.fillRect(x, sy, p.w, p.h);
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(x + p.w / 2 - 2, sy - 40, 4, 40);
+    ctx.fillStyle = p.number <= checkpoint.number ? '#3cb043' : '#ff4757';
+    ctx.beginPath();
+    ctx.moveTo(x + p.w / 2 + 2, sy - 40);
+    ctx.lineTo(x + p.w / 2 + 26, sy - 32);
+    ctx.lineTo(x + p.w / 2 + 2, sy - 24);
+    ctx.fill();
+
+  } else if (p.type === 'summit') {
+    ctx.fillStyle = '#f9c74f';
+    ctx.fillRect(x, sy, p.w, p.h);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('THE TOP!', x + p.w / 2, sy - 10);
+
+  } else if (p.type === 'moving') {
+    ctx.fillStyle = '#9b5de5';
+    ctx.fillRect(x, sy, p.w, p.h);
+    ctx.fillStyle = '#f3e8ff';
+    // little arrows so you can tell it moves
+    ctx.beginPath();
+    ctx.moveTo(x + 6, sy + 9); ctx.lineTo(x + 16, sy + 3); ctx.lineTo(x + 16, sy + 15);
+    ctx.moveTo(x + p.w - 6, sy + 9); ctx.lineTo(x + p.w - 16, sy + 3); ctx.lineTo(x + p.w - 16, sy + 15);
+    ctx.fill();
+
+  } else if (p.type === 'crumble') {
+    if (p.broken) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.setLineDash([6, 6]);
+      ctx.strokeRect(x, sy, p.w, p.h);
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle = '#c47a3a';
+      ctx.fillRect(x, sy, p.w, p.h);
+      ctx.strokeStyle = '#4a2a0a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let cx = x + 15; cx < x + p.w - 5; cx += 25) {
+        ctx.moveTo(cx, sy); ctx.lineTo(cx - 5, sy + 8); ctx.lineTo(cx + 3, sy + p.h);
+      }
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+
+  } else if (p.type === 'bouncy') {
+    const squish = p.squish > 0 ? 6 : 0;
+    ctx.fillStyle = '#f9c74f';
+    ctx.fillRect(x, sy + squish, p.w, p.h - squish);
+    ctx.fillStyle = '#e63946';
+    ctx.fillRect(x, sy + squish, p.w, 6);
+    ctx.fillStyle = '#333';
+    for (let sx = x + 10; sx < x + p.w - 5; sx += 20) ctx.fillRect(sx, sy + 8 + squish, 4, p.h - 8 - squish);
+
+  } else if (p.type === 'ice') {
+    ctx.fillStyle = '#a8e4ff';
+    ctx.fillRect(x, sy, p.w, p.h);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, sy, p.w, 4);
+    ctx.fillRect(x + 8, sy + 9, p.w * 0.3, 2);
+
+  } else {
+    // a normal platform, which looks different in every zone
+    if (p.zone === 0) {            // meadow: dirt and grass
+      ctx.fillStyle = '#5a3d1e';
+      ctx.fillRect(x, sy, p.w, p.h);
+      ctx.fillStyle = '#3cb043';
+      ctx.fillRect(x, sy, p.w, 7);
+    } else if (p.zone === 1) {     // mountains: stone
+      ctx.fillStyle = '#7d838c';
+      ctx.fillRect(x, sy, p.w, p.h);
+      ctx.fillStyle = '#b0b5bd';
+      ctx.fillRect(x, sy, p.w, 5);
+      ctx.fillStyle = '#5c616a';
+      ctx.fillRect(x + 10, sy + 9, 8, 5);
+      ctx.fillRect(x + p.w - 22, sy + 10, 10, 4);
+    } else if (p.zone === 2) {     // icy peaks: snowy rock
+      ctx.fillStyle = '#7d838c';
+      ctx.fillRect(x, sy, p.w, p.h);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, sy, p.w, 8);
+    } else {                       // space: fluffy cloud
+      ctx.fillStyle = '#f4f1ff';
+      ctx.beginPath();
+      ctx.roundRect(x, sy, p.w, p.h, 9);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x + p.w * 0.3, sy + 2, 10, 0, Math.PI * 2);
+      ctx.arc(x + p.w * 0.65, sy, 12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 function draw() {
-  // Sky gets darker the higher you go
-  const howHigh = Math.min(1, Math.max(0, (GROUND_Y - player.y) / (NUMBER_OF_PLATFORMS * 85)));
-  ctx.fillStyle = mixColor('#87ceeb', '#0b0b3b', howHigh);
+  // Sky changes color as you climb through the zones
+  const howHigh = Math.min(1, Math.max(0, (GROUND_Y - player.y) / TOWER_HEIGHT));
+  const zonePos = howHigh * (ZONES.length - 1);
+  const zi = Math.min(ZONES.length - 2, Math.floor(zonePos));
+  ctx.fillStyle = mixColor(ZONES[zi].sky, ZONES[zi + 1].sky, zonePos - zi);
   ctx.fillRect(0, 0, W, H);
 
+  // Stars show up when you get near space
+  if (howHigh > 0.6) {
+    ctx.fillStyle = 'rgba(255,255,255,' + Math.min(1, (howHigh - 0.6) * 3) + ')';
+    for (const s of stars) ctx.fillRect(s.x, s.y, s.size, s.size);
+  }
+
   // Clouds
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillStyle = 'rgba(255,255,255,' + (0.7 * (1 - Math.max(0, howHigh - 0.7) / 0.3)) + ')';
   for (const c of clouds) {
     const sy = c.y - cameraY * 0.6;
     if (sy < -60 || sy > H + 60) continue;
@@ -245,38 +487,8 @@ function draw() {
   // Platforms
   for (const p of platforms) {
     const sy = p.y - cameraY;
-    if (sy < -40 || sy > H + 40) continue;
-
-    if (p.type === 'ground') {
-      ctx.fillStyle = '#5a3d1e';
-      ctx.fillRect(p.x, sy, p.w, p.h);
-      ctx.fillStyle = '#3cb043';
-      ctx.fillRect(p.x, sy, p.w, 12);
-    } else if (p.type === 'checkpoint') {
-      ctx.fillStyle = '#2d6cdf';
-      ctx.fillRect(p.x, sy, p.w, p.h);
-      // flag
-      ctx.fillStyle = '#ddd';
-      ctx.fillRect(p.x + p.w / 2 - 2, sy - 40, 4, 40);
-      ctx.fillStyle = p.number <= checkpoint.number ? '#3cb043' : '#ff4757';
-      ctx.beginPath();
-      ctx.moveTo(p.x + p.w / 2 + 2, sy - 40);
-      ctx.lineTo(p.x + p.w / 2 + 26, sy - 32);
-      ctx.lineTo(p.x + p.w / 2 + 2, sy - 24);
-      ctx.fill();
-    } else if (p.type === 'summit') {
-      ctx.fillStyle = '#f9c74f';
-      ctx.fillRect(p.x, sy, p.w, p.h);
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 20px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('THE TOP!', p.x + p.w / 2, sy - 10);
-    } else {
-      ctx.fillStyle = '#5a3d1e';
-      ctx.fillRect(p.x, sy, p.w, p.h);
-      ctx.fillStyle = '#3cb043';
-      ctx.fillRect(p.x, sy, p.w, 7);
-    }
+    if (sy < -50 || sy > H + 50) continue;
+    drawPlatform(p, sy);
   }
 
   // Player
@@ -286,7 +498,6 @@ function draw() {
   ctx.beginPath();
   ctx.roundRect(px, py, player.w, player.h, 10);
   ctx.fill();
-  // eyes
   const eyeX = px + player.w / 2 + player.facing * 6;
   ctx.fillStyle = 'white';
   ctx.beginPath();
@@ -302,22 +513,31 @@ function draw() {
   // Score board
   const height = Math.max(0, Math.round((GROUND_Y - player.h - player.y) / 10));
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(10, 10, 190, 78);
+  ctx.fillRect(10, 10, 200, 102);
   ctx.fillStyle = 'white';
   ctx.font = '18px Arial';
   ctx.textAlign = 'left';
   ctx.fillText('Height: ' + height + ' m', 20, 34);
   ctx.fillText('Best: ' + bestHeight + ' m', 20, 58);
   ctx.fillText('Checkpoint: ' + (checkpoint.number / CHECKPOINT_EVERY), 20, 82);
+  ctx.fillText('Time: ' + formatTime(won ? finishFrames : frames), 20, 106);
+
+  // Zone name
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(W - 190, 10, 180, 34);
+  ctx.fillStyle = 'white';
+  ctx.fillText(ZONES[currentZone].name, W - 20, 34);
 
   // Messages
   if (messageTimer > 0) {
+    ctx.font = 'bold 28px Arial';
+    const textWidth = ctx.measureText(message).width;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(W / 2 - 220, 110, 440, 60);
+    ctx.fillRect(W / 2 - textWidth / 2 - 20, 120, textWidth + 40, 56);
     ctx.fillStyle = '#ffe066';
-    ctx.font = 'bold 30px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(message, W / 2, 152);
+    ctx.fillText(message, W / 2, 158);
   }
 
   // Start screen
@@ -327,9 +547,12 @@ function draw() {
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
     ctx.font = 'bold 44px Arial';
-    ctx.fillText("Don't Look Down", W / 2, H / 2 - 30);
+    ctx.fillText("Don't Look Down", W / 2, H / 2 - 50);
     ctx.font = '22px Arial';
-    ctx.fillText('Climb to the top! Press any key to start.', W / 2, H / 2 + 20);
+    ctx.fillText('Climb to the top! Press any key to start.', W / 2, H / 2);
+    ctx.font = '17px Arial';
+    ctx.fillStyle = '#ccc';
+    ctx.fillText('Purple = moving   Orange = crumbles   Yellow/red = bouncy   Light blue = slippery ice', W / 2, H / 2 + 40);
   }
 }
 
