@@ -20,7 +20,7 @@
 </head>
 <body>
 <h1>Don't Look Down</h1>
-<p>Arrow keys or A / D to move &nbsp;•&nbsp; Space or Up to jump &nbsp;•&nbsp; R to go back to your checkpoint</p>
+<p>Arrow keys or A / D to move &nbsp;•&nbsp; Space or Up to jump (press again in the air to double jump!) &nbsp;•&nbsp; R to go back to your checkpoint</p>
 <canvas id="game" width="800" height="600"></canvas>
 
 <script>
@@ -29,6 +29,8 @@
 // ============================================================
 const GRAVITY = 0.6;            // how fast you fall
 const JUMP_POWER = 13;          // how high you jump
+const DOUBLE_JUMP = true;       // can you jump again in the air?
+const DOUBLE_JUMP_POWER = 11;   // how high the second jump goes
 const RUN_SPEED = 4;            // how fast you run
 const BOUNCE_POWER = 21;        // how high bouncy platforms throw you
 const NUMBER_OF_PLATFORMS = 80; // how many platforms to the top
@@ -294,6 +296,7 @@ function updateEnemies(oldBottom, newBottom) {
       e.respawnTimer = 600;
       player.y = e.y - player.h;
       player.vy = -9;
+      player.jumpsUsed = 1;
       showMessage('Bonk!');
       continue;
     }
@@ -312,6 +315,7 @@ function updateEnemies(oldBottom, newBottom) {
     player.vy = e.type === 'bird' ? -5 : -7;
     player.knockTimer = 18;
     player.hurtTimer = 60;
+    player.jumpsUsed = 1;
     player.onGround = false;
     player.standingOn = null;
     if (e.type === 'goat') showMessage('Bonk! A goat headbutted you!');
@@ -503,7 +507,7 @@ const rocket = { x: -100, y: 250, speed: 1.2 };
 // ============================================================
 //  THE PLAYER
 // ============================================================
-const player = { x: WORLD_WIDTH / 2 - 16, y: GROUND_Y - 40, w: 32, h: 40, vx: 0, vy: 0, onGround: false, coyote: 0, facing: 1, standingOn: null, knockTimer: 0, hurtTimer: 0 };
+const player = { x: WORLD_WIDTH / 2 - 16, y: GROUND_Y - 40, w: 32, h: 40, vx: 0, vy: 0, onGround: false, coyote: 0, facing: 1, standingOn: null, knockTimer: 0, hurtTimer: 0, jumpsUsed: 0 };
 let checkpoint = { x: player.x, y: player.y, number: 0 };
 let cameraY = GROUND_Y + 100 - H;
 let cameraX = WORLD_WIDTH / 2 - W / 2;
@@ -514,6 +518,18 @@ let frames = 0;       // counts time while you play
 let finishFrames = 0; // how long it took you to reach the top
 let message = '';
 let messageTimer = 0;
+
+// Puffs of dust that appear when you double jump
+const puffs = [];
+function makePuffs() {
+  for (let i = 0; i < 8; i++) {
+    puffs.push({
+      x: player.x + player.w / 2, y: player.y + player.h,
+      vx: (Math.random() - 0.5) * 4, vy: Math.random() * 1.5 + 0.5,
+      size: 3 + Math.random() * 4, life: 20,
+    });
+  }
+}
 
 function showMessage(text) {
   message = text;
@@ -593,13 +609,29 @@ function update() {
   }
 
   // --- Jumping (coyote time lets you jump just after leaving an edge) ---
-  if (jumpPressed && (player.onGround || player.coyote > 0)) {
-    player.vy = -JUMP_POWER;
-    player.onGround = false;
-    player.coyote = 0;
-    player.standingOn = null;
+  if (jumpPressed) {
+    if (player.onGround || player.coyote > 0) {
+      // normal jump from the ground
+      player.vy = -JUMP_POWER;
+      player.onGround = false;
+      player.coyote = 0;
+      player.standingOn = null;
+      player.jumpsUsed = 1;
+    } else if (DOUBLE_JUMP && player.jumpsUsed < 2 && player.knockTimer === 0) {
+      // double jump in the air!
+      player.vy = -DOUBLE_JUMP_POWER;
+      player.jumpsUsed = 2;
+      makePuffs();
+    }
   }
   jumpPressed = false;
+
+  // dust puffs float away
+  for (let i = puffs.length - 1; i >= 0; i--) {
+    const d = puffs[i];
+    d.x += d.vx; d.y += d.vy; d.life--;
+    if (d.life <= 0) puffs.splice(i, 1);
+  }
 
   // --- Gravity ---
   player.vy += GRAVITY;
@@ -630,6 +662,7 @@ function update() {
 
         if (p.type === 'bouncy') {
           player.vy = -BOUNCE_POWER;
+          player.jumpsUsed = 1;
           p.squish = 12;
           landed = false;
           landedOn = null;
@@ -662,6 +695,7 @@ function update() {
     player.onGround = true;
     player.coyote = 6;
     player.standingOn = landedOn;
+    player.jumpsUsed = 0;
   } else {
     player.onGround = false;
     player.coyote = Math.max(0, player.coyote - 1);
@@ -1070,6 +1104,12 @@ function draw() {
 
   // Animals and aliens
   drawEnemies();
+
+  // Dust puffs
+  for (const d of puffs) {
+    ctx.fillStyle = 'rgba(255,255,255,' + (d.life / 20) * 0.8 + ')';
+    ctx.beginPath(); ctx.arc(d.x - cameraX, d.y - cameraY, d.size, 0, Math.PI * 2); ctx.fill();
+  }
 
   // Player
   drawClimber(player.x - cameraX, player.y - cameraY);
