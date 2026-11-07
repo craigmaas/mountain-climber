@@ -109,6 +109,7 @@ platforms.push({ x: 0, y: GROUND_Y, w: W, h: 100, type: 'ground', number: 0, zon
 let lastCenter = W / 2;
 let lastWidth = W;
 let lastY = GROUND_Y;
+let lastType = 'ground';
 for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   const difficulty = i / NUMBER_OF_PLATFORMS; // 0 at the bottom, 1 at the top
   const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
@@ -125,7 +126,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
       const pick = random();
       if (pick < 0.3) type = 'moving';
       else if (pick < 0.55) type = 'crumble';
-      else if (pick < 0.75) type = 'bouncy';
+      else if (pick < 0.75 && lastType !== 'bouncy' && (i + 1) % CHECKPOINT_EVERY !== 0) type = 'bouncy';
       else type = 'ice';
     }
     if (zone === 2 && type === 'normal' && random() < 0.5) type = 'ice';
@@ -135,19 +136,46 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   let w;
   if (isSummit) w = 260;
   else if (isCheckpoint) w = 180;
+  else if (type === 'bouncy') w = 50 + random() * 20; // bouncy ones are tiny
   else w = (90 - 30 * difficulty) + random() * (80 - 40 * difficulty);
 
-  // Gaps get bigger as you go up, but never too big to jump
-  const maxGap = 70 + 50 * difficulty;
-  let cx = lastCenter + (random() * 2 - 1) * (160 + 100 * difficulty);
-  cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
-  const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
-  if (gap > maxGap) {
-    const direction = cx > lastCenter ? 1 : -1;
-    cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+  let cx, y;
+  if (type === 'bouncy') {
+    // Bouncy platforms are a long, tricky jump away
+    const wantedGap = 115 + random() * 20;
+    let direction = random() < 0.5 ? -1 : 1;
+    cx = lastCenter + direction * (wantedGap + w / 2 + lastWidth / 2);
+    if (cx < w / 2 + 10 || cx > W - w / 2 - 10) {
+      direction = -direction;
+      cx = lastCenter + direction * (wantedGap + w / 2 + lastWidth / 2);
+    }
     cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+    y = lastY - (95 + 10 * difficulty) + (random() * 10 - 5);
+  } else if (lastType === 'bouncy') {
+    // After a bouncy platform you fly way up, so the next one is far above
+    const maxGap = 200;
+    cx = lastCenter + (random() * 2 - 1) * 320;
+    cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+    const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
+    if (gap > maxGap) {
+      const direction = cx > lastCenter ? 1 : -1;
+      cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+      cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+    }
+    y = lastY - (220 + random() * 40);
+  } else {
+    // Gaps get bigger as you go up, but never too big to jump
+    const maxGap = 70 + 50 * difficulty;
+    cx = lastCenter + (random() * 2 - 1) * (160 + 100 * difficulty);
+    cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+    const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
+    if (gap > maxGap) {
+      const direction = cx > lastCenter ? 1 : -1;
+      cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+      cx = Math.max(w / 2 + 10, Math.min(W - w / 2 - 10, cx));
+    }
+    y = lastY - (80 + 20 * difficulty) + (random() * 20 - 10);
   }
-  const y = lastY - (80 + 20 * difficulty) + (random() * 20 - 10);
 
   const p = {
     x: cx - w / 2, y: y, w: w, h: 18, type: type, number: i, zone: zone,
@@ -166,6 +194,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   lastCenter = cx;
   lastWidth = w;
   lastY = y;
+  lastType = type;
 }
 const TOWER_HEIGHT = GROUND_Y - lastY;
 
