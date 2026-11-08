@@ -793,7 +793,11 @@ document.getElementById('boardBtn').addEventListener('click', function () {
 document.getElementById('closeBtn').addEventListener('click', function () { this.blur(); closeOverlay(); });
 document.getElementById('againBtn').addEventListener('click', function () {
   this.blur();
-  if (confirm('Start a brand new climb from the bottom?')) location.reload();
+  if (confirm('Start a brand new climb from the bottom?')) {
+    restartGame();
+    showMessage('New climb! Go go go!');
+    closeOverlay();
+  }
 });
 document.getElementById('saveBtn').addEventListener('click', function () { this.blur(); submitScore(); });
 nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitScore(); });
