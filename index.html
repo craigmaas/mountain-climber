@@ -94,11 +94,12 @@ const LEVEL_NUMBER = 1;         // change this to get a brand new tower!
 const WORLD_WIDTH = 2400;       // how wide the world is (the screen shows 800 at a time)
 
 // The tower is split into zones. Each zone looks different.
+// "challenge" is how hard each zone is: 0 = super easy, 1 = the hardest
 const ZONES = [
-  { name: 'The Meadow',    sky: '#87ceeb' },
-  { name: 'The Mountains', sky: '#6a9bd1' },
-  { name: 'The Icy Peaks', sky: '#cfe8f7' },
-  { name: 'Outer Space',   sky: '#0b0b3b' },
+  { name: 'The Meadow',    sky: '#87ceeb', challenge: 0.8 },
+  { name: 'The Mountains', sky: '#6a9bd1', challenge: 0.9 },
+  { name: 'The Icy Peaks', sky: '#cfe8f7', challenge: 0.5 },
+  { name: 'Outer Space',   sky: '#0b0b3b', challenge: 0.9 },
 ];
 
 // A "random" number maker that gives the same numbers for the same level number
@@ -170,12 +171,9 @@ let lastWidth = W;
 let lastY = GROUND_Y;
 let lastType = 'ground';
 for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
-  let difficulty = Math.pow(i / NUMBER_OF_PLATFORMS, 1.6); // 0 at the bottom, 1 at the top, gentle in the middle
-  const MEADOW_CHALLENGE = 0.8; // how tough the Meadow is (0 = super easy, 1 = like the very top)
-  if (i > 3 && i < NUMBER_OF_PLATFORMS / ZONES.length) difficulty = Math.max(difficulty, MEADOW_CHALLENGE);
-  const TOP_CHALLENGE = 0.6; // the hardest the upper tower gets (1 = hardest)
-  if (i >= NUMBER_OF_PLATFORMS / ZONES.length) difficulty = Math.min(difficulty, TOP_CHALLENGE);
   const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
+  // How hard this platform is: the first three are a warm-up, then each zone uses its own challenge
+  const difficulty = i <= 3 ? 0 : ZONES[zone].challenge;
   const isSummit = i === NUMBER_OF_PLATFORMS;
   const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
 
@@ -311,7 +309,7 @@ function resetEnemy(e) {
 
 for (const p of platforms) {
   if (p.number < 4 || p.type !== 'normal') continue;
-  const difficulty = Math.pow(p.number / NUMBER_OF_PLATFORMS, 1.6);
+  const difficulty = ZONES[p.zone].challenge;
   const roll = random();
   if (p.zone === 0 && p.w >= 100 && roll < 0.26) {
     enemies.push(makeEnemy('bear', p));
