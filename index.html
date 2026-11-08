@@ -170,7 +170,9 @@ let lastWidth = W;
 let lastY = GROUND_Y;
 let lastType = 'ground';
 for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
-  const difficulty = Math.pow(i / NUMBER_OF_PLATFORMS, 1.6); // 0 at the bottom, 1 at the top, gentle in the middle
+  let difficulty = Math.pow(i / NUMBER_OF_PLATFORMS, 1.6); // 0 at the bottom, 1 at the top, gentle in the middle
+  const MEADOW_CHALLENGE = 0.4; // how tough the Meadow is (0 = super easy, 1 = like the very top)
+  if (i > 3 && i < NUMBER_OF_PLATFORMS / ZONES.length) difficulty = Math.max(difficulty, MEADOW_CHALLENGE);
   const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
   const isSummit = i === NUMBER_OF_PLATFORMS;
   const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
@@ -276,7 +278,7 @@ const enemies = [];
 
 function makeEnemy(type, p) {
   const e = { type: type, platform: p, dead: false, respawnTimer: 0, facing: 1, phase: random() * 6 };
-  if (type === 'bear')  { e.w = 44; e.h = 34; e.speed = 0.6; }
+  if (type === 'bear')  { e.w = 44; e.h = 34; e.speed = 0.8; }
   if (type === 'goat')  { e.w = 30; e.h = 24; e.speed = 1.2 + random(); }
   if (type === 'bird')  { e.w = 26; e.h = 16; e.speed = 1.5 + random() * 1.5; }
   if (type === 'alien') { e.w = 28; e.h = 28; e.speed = 1 + random(); }
@@ -309,8 +311,10 @@ for (const p of platforms) {
   if (p.number < 4 || p.type !== 'normal') continue;
   const difficulty = Math.pow(p.number / NUMBER_OF_PLATFORMS, 1.6);
   const roll = random();
-  if (p.zone === 0 && p.w >= 110 && roll < 0.16) {
+  if (p.zone === 0 && p.w >= 100 && roll < 0.26) {
     enemies.push(makeEnemy('bear', p));
+  } else if (p.zone === 0 && p.w >= 90 && roll < 0.4) {
+    enemies.push(makeEnemy('goat', p));
   } else if ((p.zone === 1 || p.zone === 2) && p.w >= 90 && roll < 0.14 + 0.1 * difficulty) {
     enemies.push(makeEnemy('goat', p));
   } else if ((p.zone === 1 || p.zone === 2) && roll < 0.26 + 0.12 * difficulty) {
