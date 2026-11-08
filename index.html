@@ -16,12 +16,59 @@
   h1 { margin: 6px 0 2px; font-size: 22px; }
   p { margin: 0 0 6px; color: #bbb; font-size: 13px; }
   canvas { border: 4px solid #333; border-radius: 8px; display: block; }
+  #boardBtn {
+    margin-left: 14px; padding: 3px 10px; border-radius: 6px; border: 1px solid #f9c74f;
+    background: #222; color: #f9c74f; font-size: 13px; cursor: pointer;
+  }
+  #boardBtn:hover { background: #f9c74f; color: #222; }
+  #overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+  }
+  #overlay.hidden { display: none; }
+  .panel {
+    background: #1b1b2f; border: 3px solid #f9c74f; border-radius: 14px;
+    padding: 20px 28px; width: 360px; max-width: 90vw; text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  }
+  .panel h2 { margin: 0 0 10px; color: #f9c74f; }
+  .panel ol { text-align: left; margin: 10px 0; padding-left: 28px; font-size: 17px; line-height: 1.6; }
+  .panel li span { float: right; color: #ffe066; font-family: monospace; }
+  .panel li.me { color: #7bed9f; font-weight: bold; }
+  .panel input {
+    font-size: 18px; padding: 6px 10px; width: 180px; border-radius: 6px;
+    border: 2px solid #f9c74f; background: #111; color: white; text-align: center;
+  }
+  .panel button {
+    font-size: 15px; padding: 7px 14px; margin: 6px 4px; border-radius: 6px; border: none;
+    background: #f9c74f; color: #222; cursor: pointer; font-weight: bold;
+  }
+  .panel button:hover { background: #ffe066; }
+  .panel .hidden { display: none; }
+  #finishText { font-size: 18px; margin: 4px 0 10px; }
+  #scoreNote { color: #999; font-size: 13px; margin: 4px 0 8px; }
 </style>
 </head>
 <body>
 <h1>The Mountain Climber</h1>
-<p>Arrow keys or A / D to move &nbsp;•&nbsp; Space or Up to jump (press again in the air to double jump!) &nbsp;•&nbsp; R to go back to your checkpoint</p>
+<p>Arrow keys or A / D to move &nbsp;•&nbsp; Space or Up to jump (press again in the air to double jump!) &nbsp;•&nbsp; R to go back to your checkpoint
+  <button id="boardBtn">&#127942; Leaderboard</button></p>
 <canvas id="game" width="800" height="600"></canvas>
+
+<div id="overlay" class="hidden">
+  <div class="panel">
+    <h2>&#127942; Fastest Climbers</h2>
+    <div id="nameRow" class="hidden">
+      <p id="finishText"></p>
+      <input id="nameInput" maxlength="12" placeholder="Your name" autocomplete="off">
+      <button id="saveBtn">Save my time</button>
+    </div>
+    <ol id="scoreList"></ol>
+    <p id="scoreNote"></p>
+    <button id="closeBtn">Keep playing</button>
+    <button id="againBtn">Play again</button>
+  </div>
+</div>
 
 <script>
 // ============================================================
@@ -34,6 +81,13 @@ const DOUBLE_JUMP_POWER = 11;   // how high the second jump goes
 const RUN_SPEED = 4;            // how fast you run
 const BOUNCE_POWER = 21;        // how high bouncy platforms throw you
 const NUMBER_OF_PLATFORMS = 80; // how many platforms to the top
+const LEADERBOARD_SIZE = 10;    // how many fastest times to show
+
+// ONLINE LEADERBOARD (for grown-ups): the game remembers times in this browser.
+// To share one leaderboard with everyone on the internet, follow the steps in
+// README.md and then fill this in, for example:
+//   const ONLINE_LEADERBOARD = { projectId: 'mountain-climber-1234', apiKey: 'AIza...' };
+const ONLINE_LEADERBOARD = null;
 const CHECKPOINT_EVERY = 10;    // a checkpoint every this many platforms
 const PLAYER_COLOR = '#ff8c42'; // the color of your climber's jacket
 const LEVEL_NUMBER = 1;         // change this to get a brand new tower!
@@ -86,6 +140,7 @@ let jumpPressed = false;
 let started = false;
 
 window.addEventListener('keydown', function (e) {
+  if (overlayOpen || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (!keys[e.key] && (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W')) {
     jumpPressed = true;
@@ -554,6 +609,153 @@ function formatTime(f) {
   return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 }
 
+// Same, but with hundredths of a second for the leaderboard (like 1:23.45)
+function formatTimePrecise(f) {
+  const hundredths = Math.floor((f % 60) / 60 * 100);
+  return formatTime(f) + '.' + (hundredths < 10 ? '0' : '') + hundredths;
+}
+
+// ============================================================
+//  LEADERBOARD
+// ============================================================
+const overlay = document.getElementById('overlay');
+const nameRow = document.getElementById('nameRow');
+const nameInput = document.getElementById('nameInput');
+const finishText = document.getElementById('finishText');
+const scoreList = document.getElementById('scoreList');
+const scoreNote = document.getElementById('scoreNote');
+let overlayOpen = false;
+let scoreSaved = false;
+
+const SCORES_KEY = 'mountain-climber-scores';
+
+// --- scores kept in this browser ---
+function loadLocalScores() {
+  try { return JSON.parse(localStorage.getItem(SCORES_KEY)) || []; } catch (e) { return []; }
+}
+function saveLocalScore(entry) {
+  const list = loadLocalScores();
+  list.push(entry);
+  list.sort(function (a, b) { return a.frames - b.frames; });
+  try { localStorage.setItem(SCORES_KEY, JSON.stringify(list.slice(0, 50))); } catch (e) {}
+}
+
+// --- scores shared online (only if ONLINE_LEADERBOARD is filled in) ---
+function onlineUrl(extra) {
+  return 'https://firestore.googleapis.com/v1/projects/' + ONLINE_LEADERBOARD.projectId +
+         '/databases/(default)/documents' + extra + '?key=' + ONLINE_LEADERBOARD.apiKey;
+}
+async function loadOnlineScores() {
+  const response = await fetch(onlineUrl(':runQuery'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ structuredQuery: {
+      from: [{ collectionId: 'scores' }],
+      orderBy: [{ field: { fieldPath: 'frames' }, direction: 'ASCENDING' }],
+      limit: LEADERBOARD_SIZE,
+    } }),
+  });
+  if (!response.ok) throw new Error('Could not load online scores');
+  const rows = await response.json();
+  return rows.filter(function (r) { return r.document; }).map(function (r) {
+    const f = r.document.fields;
+    return { name: f.name.stringValue, frames: Number(f.frames.integerValue), date: f.date ? f.date.stringValue : '' };
+  });
+}
+async function saveOnlineScore(entry) {
+  const response = await fetch(onlineUrl('/scores'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: {
+      name: { stringValue: entry.name },
+      frames: { integerValue: String(entry.frames) },
+      date: { stringValue: entry.date },
+    } }),
+  });
+  if (!response.ok) throw new Error('Could not save online score');
+}
+
+async function loadScores() {
+  if (ONLINE_LEADERBOARD) {
+    try {
+      const scores = await loadOnlineScores();
+      scoreNote.textContent = 'Fastest times from everyone who has played online';
+      return scores;
+    } catch (e) {
+      scoreNote.textContent = 'Could not reach the online leaderboard, showing times from this computer';
+    }
+  } else {
+    scoreNote.textContent = 'Fastest times on this computer';
+  }
+  return loadLocalScores().slice(0, LEADERBOARD_SIZE);
+}
+
+async function saveScore(entry) {
+  saveLocalScore(entry);
+  if (ONLINE_LEADERBOARD) {
+    try { await saveOnlineScore(entry); } catch (e) { console.warn(e); }
+  }
+}
+
+async function fillScoreList(highlight) {
+  scoreList.innerHTML = '<li>Loading...</li>';
+  const scores = await loadScores();
+  scoreList.innerHTML = '';
+  if (scores.length === 0) {
+    scoreList.innerHTML = '<li>No times yet. Be the first to reach the top!</li>';
+    return;
+  }
+  for (const sc of scores) {
+    const li = document.createElement('li');
+    li.textContent = sc.name;
+    const span = document.createElement('span');
+    span.textContent = formatTimePrecise(sc.frames);
+    li.appendChild(span);
+    if (highlight && sc.name === highlight.name && sc.frames === highlight.frames) li.className = 'me';
+    scoreList.appendChild(li);
+  }
+}
+
+function openOverlay() {
+  overlayOpen = true;
+  overlay.classList.remove('hidden');
+  for (const k in keys) keys[k] = false; // let go of all keys so you do not keep running
+}
+function closeOverlay() {
+  overlayOpen = false;
+  overlay.classList.add('hidden');
+}
+
+// Called when you reach the top
+function openFinishScreen() {
+  finishText.textContent = 'You reached the top in ' + formatTimePrecise(finishFrames) + '!';
+  nameRow.classList.toggle('hidden', scoreSaved);
+  openOverlay();
+  fillScoreList(null);
+  if (!scoreSaved) nameInput.focus();
+}
+
+document.getElementById('boardBtn').addEventListener('click', function () {
+  nameRow.classList.toggle('hidden', !(won && !scoreSaved));
+  openOverlay();
+  fillScoreList(null);
+  this.blur();
+});
+document.getElementById('closeBtn').addEventListener('click', closeOverlay);
+document.getElementById('againBtn').addEventListener('click', function () { location.reload(); });
+document.getElementById('saveBtn').addEventListener('click', submitScore);
+nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitScore(); });
+
+async function submitScore() {
+  if (scoreSaved) return;
+  const name = nameInput.value.trim().slice(0, 12) || 'Climber';
+  const entry = { name: name, frames: finishFrames, date: new Date().toISOString() };
+  scoreSaved = true;
+  nameRow.classList.add('hidden');
+  await saveScore(entry);
+  fillScoreList(entry);
+}
+
 // ============================================================
 //  UPDATE - runs 60 times every second
 // ============================================================
@@ -684,6 +886,7 @@ function update() {
           won = true;
           finishFrames = frames;
           text = 'YOU MADE IT! Time: ' + formatTime(finishFrames);
+          setTimeout(openFinishScreen, 1200);
         }
         if (text) showMessage(text);
         break;
@@ -1165,7 +1368,7 @@ function draw() {
 //  GAME LOOP
 // ============================================================
 function loop() {
-  if (started) update();
+  if (started && !overlayOpen) update();
   draw();
   requestAnimationFrame(loop);
 }
