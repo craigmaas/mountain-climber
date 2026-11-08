@@ -173,6 +173,8 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   let difficulty = Math.pow(i / NUMBER_OF_PLATFORMS, 1.6); // 0 at the bottom, 1 at the top, gentle in the middle
   const MEADOW_CHALLENGE = 0.8; // how tough the Meadow is (0 = super easy, 1 = like the very top)
   if (i > 3 && i < NUMBER_OF_PLATFORMS / ZONES.length) difficulty = Math.max(difficulty, MEADOW_CHALLENGE);
+  const TOP_CHALLENGE = 0.6; // the hardest the upper tower gets (1 = hardest)
+  if (i >= NUMBER_OF_PLATFORMS / ZONES.length) difficulty = Math.min(difficulty, TOP_CHALLENGE);
   const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
   const isSummit = i === NUMBER_OF_PLATFORMS;
   const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
@@ -190,7 +192,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
       else if (pick < 0.75 && lastType !== 'bouncy' && (i + 1) % CHECKPOINT_EVERY !== 0) type = 'bouncy';
       else type = 'ice';
     }
-    if (zone === 2 && type === 'normal' && random() < 0.5) type = 'ice';
+    if (zone === 2 && type === 'normal' && random() < 0.3) type = 'ice';
   }
 
   // Platforms get smaller as you go up
@@ -799,8 +801,8 @@ function update() {
     player.vx *= 0.96;
   } else if (onIce) {
     // slippery: you speed up slowly and keep sliding
-    player.vx += move * 0.35;
-    player.vx *= 0.96;
+    player.vx += move * 0.45;
+    player.vx *= 0.94;
     const maxSlide = RUN_SPEED * 1.4;
     if (player.vx > maxSlide) player.vx = maxSlide;
     if (player.vx < -maxSlide) player.vx = -maxSlide;
