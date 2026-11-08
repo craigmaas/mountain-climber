@@ -1,4 +1,4 @@
-# Greta's Project
+# The Mountain Climber
 
 This is Greta's project folder. Start here!
 
