@@ -172,8 +172,13 @@ let lastY = GROUND_Y;
 let lastType = 'ground';
 for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
-  // How hard this platform is: the first three are a warm-up, then each zone uses its own challenge
-  const difficulty = i <= 3 ? 0 : ZONES[zone].challenge;
+  // How hard this platform is. Each zone ramps up smoothly to its own challenge number,
+  // starting from where the zone below it finished (the Meadow starts at 0.15).
+  const platformsPerZone = NUMBER_OF_PLATFORMS / ZONES.length;
+  const progressInZone = (i - zone * platformsPerZone) / platformsPerZone; // 0 at the start of a zone, 1 at the end
+  const startChallenge = zone === 0 ? 0.15 : ZONES[zone - 1].challenge;
+  let difficulty = startChallenge + (ZONES[zone].challenge - startChallenge) * progressInZone;
+  if (i <= 3) difficulty = 0; // the first three platforms are a warm-up
   const isSummit = i === NUMBER_OF_PLATFORMS;
   const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
 
