@@ -83,6 +83,7 @@ const BOUNCE_POWER = 21;        // how high bouncy platforms throw you
 const NUMBER_OF_PLATFORMS = 120; // how many platforms to the top
 const LEADERBOARD_SIZE = 10;    // how many fastest times to show
 const BEARS = false;            // true = bears roam the Meadow, false = no bears
+const LIVES = 10;               // how many hits you can take before starting over
 
 // ONLINE LEADERBOARD (for grown-ups): the game remembers times in this browser.
 // To share one leaderboard with everyone on the internet, follow the steps in
@@ -376,8 +377,9 @@ function updateEnemies(oldBottom, newBottom) {
     if (player.hurtTimer > 0) continue; // you are safe for a moment after a hit
 
     if (e.type === 'bear') {
+      if (loseLife()) continue;
       respawn();
-      showMessage('A bear chased you back to your checkpoint!');
+      showMessage('A bear chased you back to your checkpoint! (' + lives + ' lives left)');
       continue;
     }
 
@@ -390,9 +392,11 @@ function updateEnemies(oldBottom, newBottom) {
     player.jumpsUsed = 1;
     player.onGround = false;
     player.standingOn = null;
-    if (e.type === 'goat') showMessage('Bonk! A goat headbutted you!');
-    else if (e.type === 'bird') showMessage('A bird swooped at you!');
-    else showMessage('Zap! An alien bumped you!');
+    let hitText = 'Zap! An alien bumped you!';
+    if (e.type === 'goat') hitText = 'Bonk! A goat headbutted you!';
+    if (e.type === 'bird') hitText = 'A bird swooped at you!';
+    if (loseLife()) continue; // that was the last life, the game restarted
+    showMessage(hitText + ' (' + lives + (lives === 1 ? ' life' : ' lives') + ' left)');
   }
 }
 
@@ -586,6 +590,7 @@ let cameraX = WORLD_WIDTH / 2 - W / 2;
 let bestHeight = 0;
 let currentZone = 0;
 let won = false;
+let lives = LIVES;
 let frames = 0;       // counts time while you play
 let finishFrames = 0; // how long it took you to reach the top
 let message = '';
@@ -617,6 +622,33 @@ function respawn() {
   player.knockTimer = 0;
   player.hurtTimer = 30;
   showMessage('Back to your checkpoint!');
+}
+
+// Lose one life. Returns true if that was your last one and the game restarted.
+function loseLife() {
+  lives--;
+  if (lives > 0) return false;
+  restartGame();
+  return true;
+}
+
+// Back to the very beginning with fresh lives
+function restartGame() {
+  lives = LIVES;
+  checkpoint = { x: WORLD_WIDTH / 2 - 16, y: GROUND_Y - 40, number: 0 };
+  respawn();
+  frames = 0;
+  finishFrames = 0;
+  won = false;
+  scoreSaved = false;
+  bestHeight = 0;
+  currentZone = 0;
+  cameraX = WORLD_WIDTH / 2 - W / 2;
+  cameraY = GROUND_Y + 100 - H;
+  for (const e of enemies) resetEnemy(e);
+  for (const p of platforms) { p.broken = false; p.crumbleTimer = 0; p.respawnTimer = 0; }
+  puffs.length = 0;
+  showMessage('Out of lives! Back to the beginning...');
 }
 
 function formatTime(f) {
@@ -1315,6 +1347,15 @@ function drawClimber(px, py) {
   ctx.lineWidth = 1;
 }
 
+function drawHeart(x, y, size, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y + size);
+  ctx.bezierCurveTo(x - size * 1.4, y, x - size * 0.5, y - size, x, y - size * 0.3);
+  ctx.bezierCurveTo(x + size * 0.5, y - size, x + size * 1.4, y, x, y + size);
+  ctx.fill();
+}
+
 function draw() {
   drawBackground();
 
@@ -1340,7 +1381,7 @@ function draw() {
   // Score board
   const height = Math.max(0, Math.round((GROUND_Y - player.h - player.y) / 10));
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(10, 10, 200, 102);
+  ctx.fillRect(10, 10, 200, 128);
   ctx.fillStyle = 'white';
   ctx.font = '18px Arial';
   ctx.textAlign = 'left';
@@ -1348,6 +1389,10 @@ function draw() {
   ctx.fillText('Best: ' + bestHeight + ' m', 20, 58);
   ctx.fillText('Checkpoint: ' + (checkpoint.number / CHECKPOINT_EVERY), 20, 82);
   ctx.fillText('Time: ' + formatTime(won ? finishFrames : frames), 20, 106);
+  // lives, shown as hearts
+  for (let i = 0; i < LIVES; i++) {
+    drawHeart(26 + i * 18, 122, 7, i < lives ? '#ff4757' : 'rgba(255,255,255,0.2)');
+  }
 
   // Zone name
   ctx.textAlign = 'right';
