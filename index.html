@@ -82,6 +82,7 @@ const RUN_SPEED = 4;            // how fast you run
 const BOUNCE_POWER = 21;        // how high bouncy platforms throw you
 const NUMBER_OF_PLATFORMS = 120; // how many platforms to the top
 const LEADERBOARD_SIZE = 10;    // how many fastest times to show
+const BEARS = false;            // true = bears roam the Meadow, false = no bears
 
 // ONLINE LEADERBOARD (for grown-ups): the game remembers times in this browser.
 // To share one leaderboard with everyone on the internet, follow the steps in
@@ -322,7 +323,7 @@ for (const p of platforms) {
   if (p.number < 4 || p.type !== 'normal') continue;
   const difficulty = ZONES[p.zone].challenge;
   const roll = random();
-  if (p.zone === 0 && p.w >= 100 && roll < 0.26) {
+  if (BEARS && p.zone === 0 && p.w >= 100 && roll < 0.26) {
     enemies.push(makeEnemy('bear', p));
   } else if (p.zone === 0 && p.w >= 90 && roll < 0.4) {
     enemies.push(makeEnemy('goat', p));
@@ -1379,7 +1380,7 @@ function draw() {
     ctx.font = '17px Arial';
     ctx.fillStyle = '#ccc';
     ctx.fillText('Purple = moving   Orange = crumbles   Yellow/red = bouncy   Light blue = slippery ice', W / 2, H / 2 + 40);
-    ctx.fillText('Jump on goats, birds and aliens to bonk them. Stay away from bears!', W / 2, H / 2 + 66);
+    ctx.fillText('Jump on goats, birds and aliens to bonk them!' + (BEARS ? ' Stay away from bears!' : ''), W / 2, H / 2 + 66);
   }
 }
 

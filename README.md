@@ -8,7 +8,7 @@ A climbing game by Greta. Open `index.html` in a web browser to play.
 - Climb through the Meadow, the Mountains, the Icy Peaks and Outer Space to reach the top.
 - Blue flag platforms are checkpoints. Press R to go back to your last one.
 - Purple platforms move, orange ones crumble, yellow ones bounce, light blue ones are icy.
-- Jump on goats, birds and aliens to bonk them. Stay away from bears!
+- Jump on goats, birds and aliens to bonk them.
 - Reach the top as fast as you can and put your name on the leaderboard.
 
 ## Changing the game
