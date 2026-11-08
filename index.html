@@ -170,7 +170,7 @@ let lastWidth = W;
 let lastY = GROUND_Y;
 let lastType = 'ground';
 for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
-  const difficulty = i / NUMBER_OF_PLATFORMS; // 0 at the bottom, 1 at the top
+  const difficulty = Math.pow(i / NUMBER_OF_PLATFORMS, 1.6); // 0 at the bottom, 1 at the top, gentle in the middle
   const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
   const isSummit = i === NUMBER_OF_PLATFORMS;
   const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
@@ -180,7 +180,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   if (isSummit) type = 'summit';
   else if (isCheckpoint) type = 'checkpoint';
   else {
-    const specialChance = 0.15 + 0.45 * difficulty;
+    const specialChance = 0.12 + 0.4 * difficulty;
     if (random() < specialChance) {
       const pick = random();
       if (pick < 0.3) type = 'moving';
@@ -196,7 +196,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   if (isSummit) w = 260;
   else if (isCheckpoint) w = 180;
   else if (type === 'bouncy') w = 50 + random() * 20; // bouncy ones are tiny
-  else w = (90 - 30 * difficulty) + random() * (80 - 40 * difficulty);
+  else w = (95 - 25 * difficulty) + random() * (80 - 30 * difficulty);
 
   let cx, y;
   if (type === 'bouncy') {
@@ -230,7 +230,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
     const sideways = random() < 0.3;                                 // a flat sideways stretch?
 
     // Gaps get bigger as you go up, but never too big to jump
-    const maxGap = (sideways ? 90 : 55) + 40 * difficulty;
+    const maxGap = (sideways ? 80 : 50) + 35 * difficulty;
     cx = lastCenter + driftDir * (30 + random() * (150 + 100 * difficulty));
     cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
     const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
@@ -250,7 +250,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
     squish: 0,                        // for bouncy platforms
   };
   if (type === 'moving') {
-    p.vx = (random() < 0.5 ? -1 : 1) * (1 + 1.5 * difficulty);
+    p.vx = (random() < 0.5 ? -1 : 1) * (0.8 + 1.2 * difficulty);
     const range = 60 + random() * 60;
     p.minX = Math.max(0, p.x - range);
     p.maxX = Math.min(WORLD_WIDTH - w, p.x + range);
@@ -292,7 +292,7 @@ function resetEnemy(e) {
     // flying ones patrol a bit past both ends of their platform
     e.minX = Math.max(0, p.x - 120);
     e.maxX = Math.min(WORLD_WIDTH - e.w, p.x + p.w + 120);
-    e.baseY = p.y - (e.type === 'alien' ? 95 : 70);
+    e.baseY = p.y - (e.type === 'alien' ? 95 : 82);
     e.x = p.x + p.w / 2 - e.w / 2;
     e.y = e.baseY;
   } else {
@@ -306,15 +306,15 @@ function resetEnemy(e) {
 
 for (const p of platforms) {
   if (p.number < 4 || p.type !== 'normal') continue;
-  const difficulty = p.number / NUMBER_OF_PLATFORMS;
+  const difficulty = Math.pow(p.number / NUMBER_OF_PLATFORMS, 1.6);
   const roll = random();
-  if (p.zone === 0 && p.w >= 110 && roll < 0.22) {
+  if (p.zone === 0 && p.w >= 110 && roll < 0.16) {
     enemies.push(makeEnemy('bear', p));
-  } else if ((p.zone === 1 || p.zone === 2) && p.w >= 80 && roll < 0.25 + 0.1 * difficulty) {
+  } else if ((p.zone === 1 || p.zone === 2) && p.w >= 90 && roll < 0.14 + 0.1 * difficulty) {
     enemies.push(makeEnemy('goat', p));
-  } else if ((p.zone === 1 || p.zone === 2) && roll < 0.45 + 0.1 * difficulty) {
+  } else if ((p.zone === 1 || p.zone === 2) && roll < 0.26 + 0.12 * difficulty) {
     enemies.push(makeEnemy('bird', p));
-  } else if (p.zone === 3 && roll < 0.35) {
+  } else if (p.zone === 3 && roll < 0.28) {
     enemies.push(makeEnemy('alien', p));
   }
 }
@@ -366,8 +366,8 @@ function updateEnemies(oldBottom, newBottom) {
 
     // knocked back!
     const dir = (player.x + player.w / 2) < (e.x + e.w / 2) ? -1 : 1;
-    player.vx = dir * (e.type === 'bird' ? 6 : 8);
-    player.vy = e.type === 'bird' ? -5 : -7;
+    player.vx = dir * (e.type === 'bird' ? 5 : 6);
+    player.vy = e.type === 'bird' ? -4 : -6;
     player.knockTimer = 18;
     player.hurtTimer = 60;
     player.jumpsUsed = 1;
@@ -775,7 +775,7 @@ function update() {
         if (p.respawnTimer <= 0) { p.broken = false; p.crumbleTimer = 0; }
       } else if (p.crumbleTimer > 0) {
         p.crumbleTimer++;
-        if (p.crumbleTimer > 35) { p.broken = true; p.respawnTimer = 180; }
+        if (p.crumbleTimer > 45) { p.broken = true; p.respawnTimer = 180; }
       }
     }
     if (p.squish > 0) p.squish--;
