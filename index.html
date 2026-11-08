@@ -93,6 +93,8 @@ const ONLINE_LEADERBOARD = null;
 const CHECKPOINT_EVERY = 10;    // a checkpoint every this many platforms
 const PLAYER_COLOR = '#ff8c42'; // the color of your climber's jacket
 const LEVEL_NUMBER = 1;         // change this to get a brand new tower!
+const LEVEL_STEP = 0.1;         // how much harder each new level gets after you reach the top
+let level = 1;                  // the level you are on right now
 const WORLD_WIDTH = 2400;       // how wide the world is (the screen shows 800 at a time)
 
 // The tower is split into zones. Each zone looks different.
@@ -105,7 +107,7 @@ const ZONES = [
 ];
 
 // A "random" number maker that gives the same numbers for the same level number
-let seed = LEVEL_NUMBER * 9999 + 12345;
+let seed = 0;
 function random() {
   seed = (seed * 1664525 + 1013904223) % 4294967296;
   return seed / 4294967296;
@@ -161,133 +163,238 @@ window.addEventListener('keydown', function (e) {
 window.addEventListener('keyup', function (e) { keys[e.key] = false; });
 
 // ============================================================
-//  BUILD THE PLATFORMS (the tower you climb)
+//  THE WORLD - platforms, animals and scenery. Built fresh for every level.
 // ============================================================
-// Kinds of platforms:
-//   normal   - just stand on it
-//   moving   - slides left and right, and carries you along
-//   crumble  - breaks apart shortly after you land on it
-//   bouncy   - throws you way up high
-//   ice      - super slippery!
-//   checkpoint / summit - where you save your spot / the goal
-const platforms = [];
-platforms.push({ x: 0, y: GROUND_Y, w: WORLD_WIDTH, h: 100, type: 'ground', number: 0, zone: 0 });
+let platforms = [], enemies = [], clouds = [], stars = [], hills = [], trees = [], farMountains = [],
+    nearMountains = [], birds = [], snowyPeaks = [], snowflakes = [];
+let moon, planet, rocket;
+let TOWER_HEIGHT = 0;
+let zoneTop = [], zoneBottom = [], boundaries = [];
 
-let lastCenter = WORLD_WIDTH / 2;
-let driftDir = 1; // which way the path is heading: 1 = right, -1 = left
-let lastWidth = W;
-let lastY = GROUND_Y;
-let lastType = 'ground';
-for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
-  const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
-  // How hard this platform is. Each zone ramps up smoothly to its own challenge number,
-  // starting from where the zone below it finished (the Meadow starts at 0.15).
-  const platformsPerZone = NUMBER_OF_PLATFORMS / ZONES.length;
-  const progressInZone = (i - zone * platformsPerZone) / platformsPerZone; // 0 at the start of a zone, 1 at the end
-  const startChallenge = zone === 0 ? 0.15 : ZONES[zone - 1].challenge;
-  let difficulty = startChallenge + (ZONES[zone].challenge - startChallenge) * progressInZone;
-  if (i <= 3) difficulty = 0; // the first three platforms are a warm-up
-  const isSummit = i === NUMBER_OF_PLATFORMS;
-  const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
+function buildWorld() {
+  // the same level number always builds the same tower
+  seed = (LEVEL_NUMBER + level - 1) * 9999 + 12345;
+  // ============================================================
+  //  BUILD THE PLATFORMS (the tower you climb)
+  // ============================================================
+  // Kinds of platforms:
+  //   normal   - just stand on it
+  //   moving   - slides left and right, and carries you along
+  //   crumble  - breaks apart shortly after you land on it
+  //   bouncy   - throws you way up high
+  //   ice      - super slippery!
+  //   checkpoint / summit - where you save your spot / the goal
+  platforms = [];
+  platforms.push({ x: 0, y: GROUND_Y, w: WORLD_WIDTH, h: 100, type: 'ground', number: 0, zone: 0 });
 
-  // Decide what kind of platform this is. Higher up = more tricky ones.
-  let type = 'normal';
-  if (isSummit) type = 'summit';
-  else if (isCheckpoint) type = 'checkpoint';
-  else {
-    const specialChance = 0.12 + 0.3 * difficulty;
-    if (random() < specialChance) {
-      const pick = random();
-      if (pick < 0.3) type = 'moving';
-      else if (pick < 0.55) type = 'crumble';
-      else if (pick < 0.75 && lastType !== 'bouncy' && (i + 1) % CHECKPOINT_EVERY !== 0) type = 'bouncy';
-      else type = 'ice';
+  let lastCenter = WORLD_WIDTH / 2;
+  let driftDir = 1; // which way the path is heading: 1 = right, -1 = left
+  let lastWidth = W;
+  let lastY = GROUND_Y;
+  let lastType = 'ground';
+  for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
+    const zone = Math.min(ZONES.length - 1, Math.floor(i / (NUMBER_OF_PLATFORMS / ZONES.length)));
+    // How hard this platform is. Each zone ramps up smoothly to its own challenge number,
+    // starting from where the zone below it finished (the Meadow starts at 0.15).
+    const platformsPerZone = NUMBER_OF_PLATFORMS / ZONES.length;
+    const progressInZone = (i - zone * platformsPerZone) / platformsPerZone; // 0 at the start of a zone, 1 at the end
+    const startChallenge = zone === 0 ? 0.15 : ZONES[zone - 1].challenge;
+    let difficulty = startChallenge + (ZONES[zone].challenge - startChallenge) * progressInZone;
+    difficulty = Math.min(1.5, difficulty + (level - 1) * LEVEL_STEP); // every level is a bit tougher
+    if (i <= 3) difficulty = 0; // the first three platforms are a warm-up
+    const isSummit = i === NUMBER_OF_PLATFORMS;
+    const isCheckpoint = !isSummit && i % CHECKPOINT_EVERY === 0;
+
+    // Decide what kind of platform this is. Higher up = more tricky ones.
+    let type = 'normal';
+    if (isSummit) type = 'summit';
+    else if (isCheckpoint) type = 'checkpoint';
+    else {
+      const specialChance = 0.12 + 0.3 * difficulty;
+      if (random() < specialChance) {
+        const pick = random();
+        if (pick < 0.3) type = 'moving';
+        else if (pick < 0.55) type = 'crumble';
+        else if (pick < 0.75 && lastType !== 'bouncy' && (i + 1) % CHECKPOINT_EVERY !== 0) type = 'bouncy';
+        else type = 'ice';
+      }
+      if (zone === 2 && type === 'normal' && random() < 0.3) type = 'ice';
     }
-    if (zone === 2 && type === 'normal' && random() < 0.3) type = 'ice';
-  }
 
-  // Platforms get smaller as you go up
-  let w;
-  if (isSummit) w = 260;
-  else if (isCheckpoint) w = 180;
-  else if (type === 'bouncy') w = 50 + random() * 20; // bouncy ones are tiny
-  else w = (95 - 20 * difficulty) + random() * (80 - 20 * difficulty);
+    // Platforms get smaller as you go up
+    let w;
+    if (isSummit) w = 260;
+    else if (isCheckpoint) w = 180;
+    else if (type === 'bouncy') w = 50 + random() * 20; // bouncy ones are tiny
+    else w = (95 - 20 * difficulty) + random() * (80 - 20 * difficulty);
 
-  let cx, y;
-  if (type === 'bouncy') {
-    // Bouncy platforms are a long, tricky jump away
-    const wantedGap = 95 + random() * 15;
-    let direction = random() < 0.5 ? -1 : 1;
-    cx = lastCenter + direction * (wantedGap + w / 2 + lastWidth / 2);
-    if (cx < w / 2 + 10 || cx > WORLD_WIDTH - w / 2 - 10) {
-      direction = -direction;
+    let cx, y;
+    if (type === 'bouncy') {
+      // Bouncy platforms are a long, tricky jump away
+      const wantedGap = 95 + random() * 15;
+      let direction = random() < 0.5 ? -1 : 1;
       cx = lastCenter + direction * (wantedGap + w / 2 + lastWidth / 2);
-    }
-    cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
-    y = lastY - (95 + 10 * difficulty) + (random() * 10 - 5);
-  } else if (lastType === 'bouncy') {
-    // After a bouncy platform you fly way up, so the next one is far above
-    const maxGap = 160;
-    cx = lastCenter + (random() * 2 - 1) * 320;
-    cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
-    const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
-    if (gap > maxGap) {
-      const direction = cx > lastCenter ? 1 : -1;
-      cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+      if (cx < w / 2 + 10 || cx > WORLD_WIDTH - w / 2 - 10) {
+        direction = -direction;
+        cx = lastCenter + direction * (wantedGap + w / 2 + lastWidth / 2);
+      }
       cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
-    }
-    y = lastY - (220 + random() * 40);
-  } else {
-    // The path wanders left and right across the world
-    if (random() < 0.12) driftDir = -driftDir;                       // sometimes it turns around
-    if (lastCenter < 200) driftDir = 1;                              // bounce off the left edge
-    if (lastCenter > WORLD_WIDTH - 200) driftDir = -1;               // bounce off the right edge
-    const sideways = random() < 0.3;                                 // a flat sideways stretch?
+      y = lastY - (95 + 10 * difficulty) + (random() * 10 - 5);
+    } else if (lastType === 'bouncy') {
+      // After a bouncy platform you fly way up, so the next one is far above
+      const maxGap = 160;
+      cx = lastCenter + (random() * 2 - 1) * 320;
+      cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
+      const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
+      if (gap > maxGap) {
+        const direction = cx > lastCenter ? 1 : -1;
+        cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+        cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
+      }
+      y = lastY - (220 + random() * 40);
+    } else {
+      // The path wanders left and right across the world
+      if (random() < 0.12) driftDir = -driftDir;                       // sometimes it turns around
+      if (lastCenter < 200) driftDir = 1;                              // bounce off the left edge
+      if (lastCenter > WORLD_WIDTH - 200) driftDir = -1;               // bounce off the right edge
+      const sideways = random() < 0.3;                                 // a flat sideways stretch?
 
-    // Gaps get bigger as you go up, but never too big to jump
-    const maxGap = (sideways ? 80 : 50) + 25 * difficulty;
-    cx = lastCenter + driftDir * (30 + random() * (150 + 100 * difficulty));
-    cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
-    const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
-    if (gap > maxGap) {
-      const direction = cx > lastCenter ? 1 : -1;
-      cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+      // Gaps get bigger as you go up, but never too big to jump
+      const maxGap = (sideways ? 80 : 50) + 25 * difficulty;
+      cx = lastCenter + driftDir * (30 + random() * (150 + 100 * difficulty));
       cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
+      const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
+      if (gap > maxGap) {
+        const direction = cx > lastCenter ? 1 : -1;
+        cx = lastCenter + direction * (maxGap + w / 2 + lastWidth / 2);
+        cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
+      }
+      if (sideways) y = lastY - (25 + random() * 25);
+      else y = lastY - (80 + 20 * Math.min(difficulty, 1)) + (random() * 20 - 10);
     }
-    if (sideways) y = lastY - (25 + random() * 25);
-    else y = lastY - (80 + 20 * difficulty) + (random() * 20 - 10);
+
+    const p = {
+      x: cx - w / 2, y: y, w: w, h: 18, type: type, number: i, zone: zone,
+      vx: 0, minX: 0, maxX: 0,          // for moving platforms
+      crumbleTimer: 0, broken: false, respawnTimer: 0, // for crumble platforms
+      squish: 0,                        // for bouncy platforms
+    };
+    if (type === 'moving') {
+      p.vx = (random() < 0.5 ? -1 : 1) * (0.8 + 0.9 * difficulty);
+      const range = 60 + random() * 60;
+      p.minX = Math.max(0, p.x - range);
+      p.maxX = Math.min(WORLD_WIDTH - w, p.x + range);
+    }
+    platforms.push(p);
+
+    lastCenter = cx;
+    lastWidth = w;
+    lastY = y;
+    lastType = type;
+  }
+  TOWER_HEIGHT = GROUND_Y - lastY;
+
+  // ============================================================
+  //  OBSTACLES - bears, goats, birds and aliens!
+  // ============================================================
+  //   bear  - slow and big. Touch one and it chases you back to your checkpoint!
+  //   goat  - trots back and forth and headbutts you off the platform
+  //   bird  - swoops back and forth in the air
+  //   alien - hovers in a flying saucer and zaps you
+  // You can bonk goats, birds and aliens by jumping on top of them.
+  enemies = [];
+
+
+
+  for (const p of platforms) {
+    if (p.number < 4 || p.type !== 'normal') continue;
+    const difficulty = Math.min(1.5, ZONES[p.zone].challenge + (level - 1) * LEVEL_STEP);
+    const roll = random();
+    if (BEARS && p.zone === 0 && p.w >= 100 && roll < 0.26) {
+      enemies.push(makeEnemy('bear', p));
+    } else if (p.zone === 0 && p.w >= 90 && roll < 0.4) {
+      enemies.push(makeEnemy('goat', p));
+    } else if ((p.zone === 1 || p.zone === 2) && p.w >= 90 && roll < 0.14 + 0.1 * difficulty) {
+      enemies.push(makeEnemy('goat', p));
+    } else if ((p.zone === 1 || p.zone === 2) && roll < 0.26 + 0.12 * difficulty) {
+      enemies.push(makeEnemy('bird', p));
+    } else if (p.zone === 3 && roll < 0.2) {
+      enemies.push(makeEnemy('alien', p));
+    }
   }
 
-  const p = {
-    x: cx - w / 2, y: y, w: w, h: 18, type: type, number: i, zone: zone,
-    vx: 0, minX: 0, maxX: 0,          // for moving platforms
-    crumbleTimer: 0, broken: false, respawnTimer: 0, // for crumble platforms
-    squish: 0,                        // for bouncy platforms
-  };
-  if (type === 'moving') {
-    p.vx = (random() < 0.5 ? -1 : 1) * (0.8 + 0.9 * difficulty);
-    const range = 60 + random() * 60;
-    p.minX = Math.max(0, p.x - range);
-    p.maxX = Math.min(WORLD_WIDTH - w, p.x + range);
-  }
-  platforms.push(p);
 
-  lastCenter = cx;
-  lastWidth = w;
-  lastY = y;
-  lastType = type;
+
+  // ============================================================
+  //  BACKGROUND SCENERY (different in every zone)
+  // ============================================================
+  // Where each zone starts and ends (remember: higher up = smaller y)
+  zoneTop = [];
+  zoneBottom = [];
+  for (const p of platforms) {
+    if (zoneTop[p.zone] === undefined || p.y < zoneTop[p.zone]) zoneTop[p.zone] = p.y;
+    if (zoneBottom[p.zone] === undefined || p.y > zoneBottom[p.zone]) zoneBottom[p.zone] = p.y;
+  }
+  // The line between one zone and the next
+  boundaries = [];
+  for (let z = 0; z < ZONES.length - 1; z++) boundaries.push((zoneTop[z] + zoneBottom[z + 1]) / 2);
+
+  // Which zone is a height in?
+
+  // How strongly should zone z's scenery show at height y? (1 = fully, 0 = not at all)
+
+
+  // Far-away scenery moves slower than the platforms. That is called "parallax".
+  // This picks a spot for a decoration so it shows up while you are in that zone.
+
+  // Picks a sideways spot for far-away scenery that scrolls at a given speed
+
+  clouds = [];
+  for (let i = 0; i < 120; i++) {
+    const z = Math.floor(random() * 3); // clouds in the first three zones
+    clouds.push({ x: spreadAcross(0.6), py: spotInZone(z, 0.6), size: 30 + random() * 40 });
+  }
+  stars = [];
+  for (let i = 0; i < 120; i++) {
+    stars.push({ x: random() * W, y: random() * H, size: 1 + random() * 2, twinkle: random() * 6 });
+  }
+  // Meadow
+  hills = [];
+  const hillColors = ['#4caf50', '#43a047', '#388e3c'];
+  for (let i = 0; i < 9; i++) {
+    hills.push({ x: spreadAcross(0.8), py: 540 + random() * 60, r: 180 + random() * 90, color: hillColors[i % 3] });
+  }
+  trees = [];
+  for (let i = 0; i < 60; i++) {
+    trees.push({ x: spreadAcross(0.5), py: spotInZone(0, 0.5), size: 20 + random() * 25 });
+  }
+  // Mountains
+  farMountains = [];
+  for (let i = 0; i < 28; i++) {
+    farMountains.push({ x: spreadAcross(0.3), py: spotInZone(1, 0.3), w: 250 + random() * 250, h: 180 + random() * 200 });
+  }
+  nearMountains = [];
+  for (let i = 0; i < 22; i++) {
+    nearMountains.push({ x: spreadAcross(0.5), py: spotInZone(1, 0.5), w: 180 + random() * 200, h: 150 + random() * 150 });
+  }
+  birds = [];
+  for (let i = 0; i < 7; i++) {
+    birds.push({ x: random() * W, y: 60 + random() * 400, speed: 0.6 + random() * 0.8, flap: random() * 6 });
+  }
+  // Icy Peaks
+  snowyPeaks = [];
+  for (let i = 0; i < 30; i++) {
+    snowyPeaks.push({ x: spreadAcross(0.4), py: spotInZone(2, 0.4), w: 200 + random() * 200, h: 200 + random() * 200 });
+  }
+  snowflakes = [];
+  for (let i = 0; i < 90; i++) {
+    snowflakes.push({ x: random() * W, y: random() * H, speed: 0.7 + random() * 1.3, wobble: random() * 6, size: 1.5 + random() * 2 });
+  }
+  // Outer Space
+  moon = { x: spreadAcross(0.2), py: spotInZone(3, 0.2), r: 70 };
+  planet = { x: spreadAcross(0.3), py: spotInZone(3, 0.3), r: 45 };
+  rocket = { x: -100, y: 250, speed: 1.2 };
 }
-const TOWER_HEIGHT = GROUND_Y - lastY;
-
-// ============================================================
-//  OBSTACLES - bears, goats, birds and aliens!
-// ============================================================
-//   bear  - slow and big. Touch one and it chases you back to your checkpoint!
-//   goat  - trots back and forth and headbutts you off the platform
-//   bird  - swoops back and forth in the air
-//   alien - hovers in a flying saucer and zaps you
-// You can bonk goats, birds and aliens by jumping on top of them.
-const enemies = [];
 
 function makeEnemy(type, p) {
   const e = { type: type, platform: p, dead: false, respawnTimer: 0, facing: 1, phase: random() * 6 };
@@ -317,23 +424,6 @@ function resetEnemy(e) {
     e.maxX = p.x + p.w - e.w;
     e.x = Math.min(e.maxX, Math.max(e.minX, p.x + p.w / 2 - e.w / 2));
     e.y = p.y - e.h;
-  }
-}
-
-for (const p of platforms) {
-  if (p.number < 4 || p.type !== 'normal') continue;
-  const difficulty = ZONES[p.zone].challenge;
-  const roll = random();
-  if (BEARS && p.zone === 0 && p.w >= 100 && roll < 0.26) {
-    enemies.push(makeEnemy('bear', p));
-  } else if (p.zone === 0 && p.w >= 90 && roll < 0.4) {
-    enemies.push(makeEnemy('goat', p));
-  } else if ((p.zone === 1 || p.zone === 2) && p.w >= 90 && roll < 0.14 + 0.1 * difficulty) {
-    enemies.push(makeEnemy('goat', p));
-  } else if ((p.zone === 1 || p.zone === 2) && roll < 0.26 + 0.12 * difficulty) {
-    enemies.push(makeEnemy('bird', p));
-  } else if (p.zone === 3 && roll < 0.2) {
-    enemies.push(makeEnemy('alien', p));
   }
 }
 
@@ -476,28 +566,12 @@ function drawEnemies() {
   ctx.lineWidth = 1;
 }
 
-// ============================================================
-//  BACKGROUND SCENERY (different in every zone)
-// ============================================================
-// Where each zone starts and ends (remember: higher up = smaller y)
-const zoneTop = [];
-const zoneBottom = [];
-for (const p of platforms) {
-  if (zoneTop[p.zone] === undefined || p.y < zoneTop[p.zone]) zoneTop[p.zone] = p.y;
-  if (zoneBottom[p.zone] === undefined || p.y > zoneBottom[p.zone]) zoneBottom[p.zone] = p.y;
-}
-// The line between one zone and the next
-const boundaries = [];
-for (let z = 0; z < ZONES.length - 1; z++) boundaries.push((zoneTop[z] + zoneBottom[z + 1]) / 2);
-
-// Which zone is a height in?
 function zoneAt(y) {
   let z = 0;
   while (z < boundaries.length && y < boundaries[z]) z++;
   return z;
 }
 
-// How strongly should zone z's scenery show at height y? (1 = fully, 0 = not at all)
 const BLEND = 250;
 function zoneStrength(z, y) {
   const topEdge = z === 0 ? 999999 : boundaries[z - 1];      // bottom of zone (bigger y)
@@ -521,64 +595,18 @@ function skyColorAt(y) {
   return ZONES[z].sky;
 }
 
-// Far-away scenery moves slower than the platforms. That is called "parallax".
-// This picks a spot for a decoration so it shows up while you are in that zone.
 function spotInZone(z, parallax) {
   const camMin = zoneTop[z] - H * 0.55;
   const camMax = Math.min(GROUND_Y + 100 - H, zoneBottom[z] - H * 0.55);
   return parallax * camMin + random() * (parallax * (camMax - camMin) + H);
 }
 
-// Picks a sideways spot for far-away scenery that scrolls at a given speed
 function spreadAcross(parallax) {
   return random() * (parallax * (WORLD_WIDTH - W) + W);
 }
 
-const clouds = [];
-for (let i = 0; i < 120; i++) {
-  const z = Math.floor(random() * 3); // clouds in the first three zones
-  clouds.push({ x: spreadAcross(0.6), py: spotInZone(z, 0.6), size: 30 + random() * 40 });
-}
-const stars = [];
-for (let i = 0; i < 120; i++) {
-  stars.push({ x: random() * W, y: random() * H, size: 1 + random() * 2, twinkle: random() * 6 });
-}
-// Meadow
-const hills = [];
-const hillColors = ['#4caf50', '#43a047', '#388e3c'];
-for (let i = 0; i < 9; i++) {
-  hills.push({ x: spreadAcross(0.8), py: 540 + random() * 60, r: 180 + random() * 90, color: hillColors[i % 3] });
-}
-const trees = [];
-for (let i = 0; i < 60; i++) {
-  trees.push({ x: spreadAcross(0.5), py: spotInZone(0, 0.5), size: 20 + random() * 25 });
-}
-// Mountains
-const farMountains = [];
-for (let i = 0; i < 28; i++) {
-  farMountains.push({ x: spreadAcross(0.3), py: spotInZone(1, 0.3), w: 250 + random() * 250, h: 180 + random() * 200 });
-}
-const nearMountains = [];
-for (let i = 0; i < 22; i++) {
-  nearMountains.push({ x: spreadAcross(0.5), py: spotInZone(1, 0.5), w: 180 + random() * 200, h: 150 + random() * 150 });
-}
-const birds = [];
-for (let i = 0; i < 7; i++) {
-  birds.push({ x: random() * W, y: 60 + random() * 400, speed: 0.6 + random() * 0.8, flap: random() * 6 });
-}
-// Icy Peaks
-const snowyPeaks = [];
-for (let i = 0; i < 30; i++) {
-  snowyPeaks.push({ x: spreadAcross(0.4), py: spotInZone(2, 0.4), w: 200 + random() * 200, h: 200 + random() * 200 });
-}
-const snowflakes = [];
-for (let i = 0; i < 90; i++) {
-  snowflakes.push({ x: random() * W, y: random() * H, speed: 0.7 + random() * 1.3, wobble: random() * 6, size: 1.5 + random() * 2 });
-}
-// Outer Space
-const moon = { x: spreadAcross(0.2), py: spotInZone(3, 0.2), r: 70 };
-const planet = { x: spreadAcross(0.3), py: spotInZone(3, 0.3), r: 45 };
-const rocket = { x: -100, y: 250, speed: 1.2 };
+buildWorld();
+
 
 // ============================================================
 //  THE PLAYER
@@ -651,6 +679,14 @@ function restartGame() {
   showMessage('Out of lives! Back to the beginning...');
 }
 
+// Move on to the next level: a brand new, tougher tower
+function startLevel(n) {
+  level = n;
+  buildWorld();
+  restartGame();
+  showMessage('Level ' + level + '! Climb!');
+}
+
 function formatTime(f) {
   const totalSeconds = Math.floor(f / 60);
   const minutes = Math.floor(totalSeconds / 60);
@@ -682,10 +718,15 @@ const SCORES_KEY = 'mountain-climber-scores';
 function loadLocalScores() {
   try { return JSON.parse(localStorage.getItem(SCORES_KEY)) || []; } catch (e) { return []; }
 }
+// Highest level first, then the fastest time
+function compareScores(a, b) {
+  return ((b.level || 1) - (a.level || 1)) || (a.frames - b.frames);
+}
+
 function saveLocalScore(entry) {
   const list = loadLocalScores();
   list.push(entry);
-  list.sort(function (a, b) { return a.frames - b.frames; });
+  list.sort(compareScores);
   try { localStorage.setItem(SCORES_KEY, JSON.stringify(list.slice(0, 50))); } catch (e) {}
 }
 
@@ -701,15 +742,20 @@ async function loadOnlineScores() {
     body: JSON.stringify({ structuredQuery: {
       from: [{ collectionId: 'scores' }],
       orderBy: [{ field: { fieldPath: 'frames' }, direction: 'ASCENDING' }],
-      limit: LEADERBOARD_SIZE,
+      limit: 50,
     } }),
   });
   if (!response.ok) throw new Error('Could not load online scores');
   const rows = await response.json();
   return rows.filter(function (r) { return r.document; }).map(function (r) {
     const f = r.document.fields;
-    return { name: f.name.stringValue, frames: Number(f.frames.integerValue), date: f.date ? f.date.stringValue : '' };
-  });
+    return {
+      name: f.name.stringValue,
+      frames: Number(f.frames.integerValue),
+      level: f.level ? Number(f.level.integerValue) : 1,
+      date: f.date ? f.date.stringValue : '',
+    };
+  }).sort(compareScores).slice(0, LEADERBOARD_SIZE);
 }
 async function saveOnlineScore(entry) {
   const response = await fetch(onlineUrl('/scores'), {
@@ -718,6 +764,7 @@ async function saveOnlineScore(entry) {
     body: JSON.stringify({ fields: {
       name: { stringValue: entry.name },
       frames: { integerValue: String(entry.frames) },
+      level: { integerValue: String(entry.level || 1) },
       date: { stringValue: entry.date },
     } }),
   });
@@ -728,15 +775,15 @@ async function loadScores() {
   if (ONLINE_LEADERBOARD) {
     try {
       const scores = await loadOnlineScores();
-      scoreNote.textContent = 'Fastest times from everyone who has played online';
+      scoreNote.textContent = 'Highest level first, then fastest time. From everyone who plays online.';
       return scores;
     } catch (e) {
       scoreNote.textContent = 'Could not reach the online leaderboard, showing times from this computer';
     }
   } else {
-    scoreNote.textContent = 'Fastest times on this computer';
+    scoreNote.textContent = 'Highest level first, then fastest time. From this computer.';
   }
-  return loadLocalScores().slice(0, LEADERBOARD_SIZE);
+  return loadLocalScores().sort(compareScores).slice(0, LEADERBOARD_SIZE);
 }
 
 async function saveScore(entry) {
@@ -756,11 +803,11 @@ async function fillScoreList(highlight) {
   }
   for (const sc of scores) {
     const li = document.createElement('li');
-    li.textContent = sc.name;
+    li.textContent = sc.name + '  (Level ' + (sc.level || 1) + ')';
     const span = document.createElement('span');
     span.textContent = formatTimePrecise(sc.frames);
     li.appendChild(span);
-    if (highlight && sc.name === highlight.name && sc.frames === highlight.frames) li.className = 'me';
+    if (highlight && sc.name === highlight.name && sc.frames === highlight.frames && (sc.level || 1) === (highlight.level || 1)) li.className = 'me';
     scoreList.appendChild(li);
   }
 }
@@ -777,7 +824,8 @@ function closeOverlay() {
 
 // Called when you reach the top
 function openFinishScreen() {
-  finishText.textContent = 'You reached the top in ' + formatTimePrecise(finishFrames) + '!';
+  finishText.textContent = 'You reached the top of Level ' + level + ' in ' + formatTimePrecise(finishFrames) + '!';
+  document.getElementById('againBtn').textContent = 'Next level!';
   nameRow.classList.toggle('hidden', scoreSaved);
   openOverlay();
   fillScoreList(null);
@@ -786,6 +834,7 @@ function openFinishScreen() {
 
 document.getElementById('boardBtn').addEventListener('click', function () {
   nameRow.classList.toggle('hidden', !(won && !scoreSaved));
+  document.getElementById('againBtn').textContent = won ? 'Next level!' : 'Play again';
   openOverlay();
   fillScoreList(null);
   this.blur();
@@ -793,7 +842,10 @@ document.getElementById('boardBtn').addEventListener('click', function () {
 document.getElementById('closeBtn').addEventListener('click', function () { this.blur(); closeOverlay(); });
 document.getElementById('againBtn').addEventListener('click', function () {
   this.blur();
-  if (confirm('Start a brand new climb from the bottom?')) {
+  if (won) {
+    startLevel(level + 1);
+    closeOverlay();
+  } else if (confirm('Start this level again from the bottom?')) {
     restartGame();
     showMessage('New climb! Go go go!');
     closeOverlay();
@@ -805,7 +857,7 @@ nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') subm
 async function submitScore() {
   if (scoreSaved) return;
   const name = nameInput.value.trim().slice(0, 12) || 'Climber';
-  const entry = { name: name, frames: finishFrames, date: new Date().toISOString() };
+  const entry = { name: name, frames: finishFrames, level: level, date: new Date().toISOString() };
   scoreSaved = true;
   nameRow.classList.add('hidden');
   await saveScore(entry);
@@ -941,7 +993,7 @@ function update() {
         if (p.type === 'summit' && !won) {
           won = true;
           finishFrames = frames;
-          text = 'YOU MADE IT! Time: ' + formatTime(finishFrames);
+          text = 'LEVEL ' + level + ' DONE! Time: ' + formatTime(finishFrames);
           setTimeout(openFinishScreen, 1200);
         }
         if (text) showMessage(text);
@@ -1401,9 +1453,9 @@ function draw() {
   // Zone name
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(W - 190, 10, 180, 34);
+  ctx.fillRect(W - 290, 10, 280, 34);
   ctx.fillStyle = 'white';
-  ctx.fillText(ZONES[zoneAt(player.y)].name, W - 20, 34);
+  ctx.fillText('Level ' + level + '   \u2022   ' + ZONES[zoneAt(player.y)].name, W - 20, 34);
 
   // Messages
   if (messageTimer > 0) {

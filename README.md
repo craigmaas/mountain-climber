@@ -10,6 +10,7 @@ A climbing game by Greta. Open `index.html` in a web browser to play.
 - Purple platforms move, orange ones crumble, yellow ones bounce, light blue ones are icy.
 - Jump on goats, birds and aliens to bonk them.
 - Reach the top as fast as you can and put your name on the leaderboard.
+- Every time you reach the top, the next level is a brand new, tougher tower.
 
 ## Changing the game
 
@@ -51,12 +52,14 @@ Firebase Firestore database. No server code is needed. Setup takes about ten min
      match /databases/{database}/documents {
        match /scores/{scoreId} {
          allow read: if true;
-         allow create: if request.resource.data.keys().hasOnly(['name', 'frames', 'date'])
+         allow create: if request.resource.data.keys().hasOnly(['name', 'frames', 'level', 'date'])
                        && request.resource.data.name is string
                        && request.resource.data.name.size() > 0
                        && request.resource.data.name.size() <= 12
                        && request.resource.data.frames is int
                        && request.resource.data.frames > 0
+                       && request.resource.data.level is int
+                       && request.resource.data.level > 0
                        && request.resource.data.date is string;
          allow update, delete: if false;
        }
