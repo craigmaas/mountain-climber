@@ -180,7 +180,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   if (isSummit) type = 'summit';
   else if (isCheckpoint) type = 'checkpoint';
   else {
-    const specialChance = 0.12 + 0.4 * difficulty;
+    const specialChance = 0.12 + 0.3 * difficulty;
     if (random() < specialChance) {
       const pick = random();
       if (pick < 0.3) type = 'moving';
@@ -196,7 +196,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
   if (isSummit) w = 260;
   else if (isCheckpoint) w = 180;
   else if (type === 'bouncy') w = 50 + random() * 20; // bouncy ones are tiny
-  else w = (95 - 25 * difficulty) + random() * (80 - 30 * difficulty);
+  else w = (95 - 20 * difficulty) + random() * (80 - 20 * difficulty);
 
   let cx, y;
   if (type === 'bouncy') {
@@ -230,7 +230,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
     const sideways = random() < 0.3;                                 // a flat sideways stretch?
 
     // Gaps get bigger as you go up, but never too big to jump
-    const maxGap = (sideways ? 80 : 50) + 35 * difficulty;
+    const maxGap = (sideways ? 80 : 50) + 25 * difficulty;
     cx = lastCenter + driftDir * (30 + random() * (150 + 100 * difficulty));
     cx = Math.max(w / 2 + 10, Math.min(WORLD_WIDTH - w / 2 - 10, cx));
     const gap = Math.abs(cx - lastCenter) - w / 2 - lastWidth / 2;
@@ -250,7 +250,7 @@ for (let i = 1; i <= NUMBER_OF_PLATFORMS; i++) {
     squish: 0,                        // for bouncy platforms
   };
   if (type === 'moving') {
-    p.vx = (random() < 0.5 ? -1 : 1) * (0.8 + 1.2 * difficulty);
+    p.vx = (random() < 0.5 ? -1 : 1) * (0.8 + 0.9 * difficulty);
     const range = 60 + random() * 60;
     p.minX = Math.max(0, p.x - range);
     p.maxX = Math.min(WORLD_WIDTH - w, p.x + range);
@@ -290,8 +290,9 @@ function resetEnemy(e) {
   e.vx = e.speed * (Math.random() < 0.5 ? -1 : 1);
   if (e.type === 'bird' || e.type === 'alien') {
     // flying ones patrol a bit past both ends of their platform
-    e.minX = Math.max(0, p.x - 120);
-    e.maxX = Math.min(WORLD_WIDTH - e.w, p.x + p.w + 120);
+    const reach = e.type === 'alien' ? 70 : 120;
+    e.minX = Math.max(0, p.x - reach);
+    e.maxX = Math.min(WORLD_WIDTH - e.w, p.x + p.w + reach);
     e.baseY = p.y - (e.type === 'alien' ? 95 : 82);
     e.x = p.x + p.w / 2 - e.w / 2;
     e.y = e.baseY;
@@ -314,7 +315,7 @@ for (const p of platforms) {
     enemies.push(makeEnemy('goat', p));
   } else if ((p.zone === 1 || p.zone === 2) && roll < 0.26 + 0.12 * difficulty) {
     enemies.push(makeEnemy('bird', p));
-  } else if (p.zone === 3 && roll < 0.28) {
+  } else if (p.zone === 3 && roll < 0.2) {
     enemies.push(makeEnemy('alien', p));
   }
 }
