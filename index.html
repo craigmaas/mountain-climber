@@ -141,7 +141,13 @@ let jumpPressed = false;
 let started = false;
 
 window.addEventListener('keydown', function (e) {
-  if (overlayOpen || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+  if (e.target.tagName === 'INPUT') return; // typing a name, leave it alone
+  if (overlayOpen || e.target.tagName === 'BUTTON') {
+    // Stop Space / Enter from "clicking" a button by accident (that would restart the game!)
+    if (e.key === ' ' || e.key === 'Enter') e.preventDefault();
+    if (e.target.tagName === 'BUTTON') e.target.blur();
+    return;
+  }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (!keys[e.key] && (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W')) {
     jumpPressed = true;
@@ -751,9 +757,12 @@ document.getElementById('boardBtn').addEventListener('click', function () {
   fillScoreList(null);
   this.blur();
 });
-document.getElementById('closeBtn').addEventListener('click', closeOverlay);
-document.getElementById('againBtn').addEventListener('click', function () { location.reload(); });
-document.getElementById('saveBtn').addEventListener('click', submitScore);
+document.getElementById('closeBtn').addEventListener('click', function () { this.blur(); closeOverlay(); });
+document.getElementById('againBtn').addEventListener('click', function () {
+  this.blur();
+  if (confirm('Start a brand new climb from the bottom?')) location.reload();
+});
+document.getElementById('saveBtn').addEventListener('click', function () { this.blur(); submitScore(); });
 nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitScore(); });
 
 async function submitScore() {
