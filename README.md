@@ -37,9 +37,9 @@ about a minute after every push to `main`.
 
 ### Step 2: the shared online leaderboard (optional, free)
 
-Out of the box the leaderboard only remembers times in each player's own browser.
-To share one leaderboard between everyone, the game can store times in a free
-Firebase Firestore database. No server code is needed. Setup takes about ten minutes.
+This copy of the game is already connected to a shared leaderboard (Firebase project
+`mountain-climber-leaderboard`, owned by Craig). The steps below are how it was set up,
+in case you want your own. Setup takes about ten minutes and is free.
 
 1. Go to https://console.firebase.google.com and sign in with a Google account.
 2. Click "Add project", give it a name (for example `mountain-climber`), and turn off
