@@ -1,6 +1,7 @@
 # The Mountain Climber
 
-A climbing game by Greta. Open `index.html` in a web browser to play.
+A climbing game by Greta. Play it online at https://craigmaas.github.io/mountain-climber/
+or open `index.html` in a web browser.
 
 ## How to play
 
@@ -30,6 +31,9 @@ The game is a single `index.html` file, so GitHub Pages works well:
 2. In the repository, go to Settings, then Pages.
 3. Under "Build and deployment" choose "Deploy from a branch", pick `main` and the root folder, and save.
 4. After a minute the game is live at `https://<username>.github.io/<repository>/`.
+
+This game is live at https://craigmaas.github.io/mountain-climber/ and updates itself
+about a minute after every push to `main`.
 
 ### Step 2: the shared online leaderboard (optional, free)
 
